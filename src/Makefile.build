@@ -88,8 +88,8 @@ kernel.bin: kernel.o
 threads/loader.o: threads/loader.S
 	$(CC) -c $< -o $@ $(ASFLAGS) $(CPPFLAGS) $(DEFINES)
 
-loader.bin: threads/loader.o
-	$(LD) -N -e 0 -Ttext 0x7c00 --oformat binary -o $@ $<
+loader.bin: threads/loader.o loaderfix.ld
+	$(LD) -N -e 0 -T $(word 2, $^) -o $@ $<
 
 os.dsk: kernel.bin
 	cat $^ > $@
