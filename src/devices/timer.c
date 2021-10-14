@@ -1,12 +1,12 @@
 #include "devices/timer.h"
 #include <debug.h>
 #include <inttypes.h>
+#include "lib/kernel/list.h"
 #include <round.h>
 #include <stdio.h>
 #include "devices/pit.h"
 #include "threads/interrupt.h"
 #include "threads/synch.h"
-#include "threads/thread.h"
   
 /* See [8254] for hardware details of the 8254 timer chip. */
 
@@ -23,6 +23,10 @@ static int64_t ticks;
 /* Number of loops per timer tick.
    Initialized by timer_calibrate(). */
 static unsigned loops_per_tick;
+
+// PART 0
+/* Initialises a list, acting like a priority queue, of all the currently sleeping threads */
+struct list sleeping_threads = LIST_INITIALIZER (sleeping_threads);
 
 static intr_handler_func timer_interrupt;
 static bool too_many_loops (unsigned loops);
@@ -84,16 +88,51 @@ timer_elapsed (int64_t then)
   return timer_ticks () - then;
 }
 
+
+// Initialises a sleeping thread with the thread it embeds and the tick to wake on
+static void
+thread_sleeping_init (struct sleeping_thread *sleeping_thread, struct thread *thread, int64_t tick_to_wake_on)
+{
+  ASSERT (sleeping_thread != NULL);
+  sleeping_thread->thread = thread;
+  sleeping_thread->tick_to_wake_on = tick_to_wake_on;
+}
+
+
+// Compares sleeping threads on the tick they are meant to wake on
+static bool compare_sleeping_threads(const struct list_elem *a,
+                              const struct list_elem *b,
+                              void *aux)
+{
+  int64_t time1 = list_entry(a, struct sleeping_thread, elem)->tick_to_wake_on;
+  int64_t time2 = list_entry(b, struct sleeping_thread, elem)->tick_to_wake_on;
+  return time1 < time2;
+}
+
+
 /* Sleeps for approximately TICKS timer ticks.  Interrupts must
    be turned on. */
 void
 timer_sleep (int64_t ticks) 
 {
-  int64_t start = timer_ticks ();
-
   ASSERT (intr_get_level () == INTR_ON);
-  while (timer_elapsed (start) < ticks) 
-    thread_yield ();
+
+  if (ticks <= 0) {
+    return;
+  }
+
+  int64_t start = timer_ticks ();
+  int64_t wake_on = start + ticks;
+
+  enum intr_level old_level = intr_disable();
+
+  struct sleeping_thread sleeping_thread;
+  struct thread *current_thread = thread_current();
+  thread_sleeping_init(&sleeping_thread, current_thread, wake_on);
+  list_insert_ordered(&sleeping_threads, &sleeping_thread.elem, &compare_sleeping_threads, NULL);
+
+  thread_block();
+  intr_set_level(old_level);
 }
 
 /* Sleeps for approximately MS milliseconds.  Interrupts must be
@@ -165,6 +204,25 @@ timer_print_stats (void)
 {
   printf ("Timer: %"PRId64" ticks\n", timer_ticks ());
 }
+
+
+/* Function to wake up all threads at the current time */
+static void
+wake_up_threads(struct list *thread_list, int64_t current_tick) {
+  // Interrupts have been disabled since this is called from an interrupt handler
+  ASSERT (intr_get_level() == INTR_OFF);
+
+  if (!list_empty(thread_list)) {
+    struct sleeping_thread *first_thread = list_entry (list_front (thread_list),
+                                struct sleeping_thread, elem);
+    int64_t tick_to_wake = first_thread->tick_to_wake_on;
+    if (tick_to_wake == current_tick) {
+      thread_unblock(first_thread->thread);
+      list_pop_front (thread_list);
+      wake_up_threads(thread_list, current_tick);
+    }
+  }
+}
 
 /* Timer interrupt handler. */
 static void
@@ -172,7 +230,9 @@ timer_interrupt (struct intr_frame *args UNUSED)
 {
   ticks++;
   thread_tick ();
+  wake_up_threads(&sleeping_threads, ticks);
 }
+
 
 /* Returns true if LOOPS iterations waits for more than one timer
    tick, otherwise false. */

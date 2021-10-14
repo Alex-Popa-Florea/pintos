@@ -3,6 +3,7 @@
 
 #include <round.h>
 #include <stdint.h>
+#include "threads/thread.h"
 
 /* Number of timer interrupts per second. */
 #define TIMER_FREQ 100
@@ -25,5 +26,13 @@ void timer_udelay (int64_t microseconds);
 void timer_ndelay (int64_t nanoseconds);
 
 void timer_print_stats (void);
+
+// TASK 0
+/* Struct to capture a thread alongside when it should wake */
+struct sleeping_thread {
+  struct thread *thread;
+  int64_t tick_to_wake_on;
+  struct list_elem elem;
+};
 
 #endif /* devices/timer.h */
