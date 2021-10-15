@@ -102,7 +102,7 @@ thread_sleeping_init (struct sleeping_thread *sleeping_thread, struct thread *th
 // Compares sleeping threads on the tick they are meant to wake on
 static bool compare_sleeping_threads(const struct list_elem *a,
                               const struct list_elem *b,
-                              void *aux)
+                              void *aux UNUSED)
 {
   int64_t time1 = list_entry(a, struct sleeping_thread, elem)->tick_to_wake_on;
   int64_t time2 = list_entry(b, struct sleeping_thread, elem)->tick_to_wake_on;
