@@ -8,14 +8,14 @@
 #include "userprog/process.h"
 #endif
 
-fp_int convert_to_fixed_point(int32_t n) 
+fp_int inline convert_to_fixed_point(int32_t n) 
 {
-
+    return (fp_int){n * FIXED_F};
 }
 
-int32_t convert_to_int_round_zero(fp_int x) 
+int32_t inline convert_to_int_round_zero(fp_int x) 
 {
-
+    return (int32_t) x.val / FIXED_F;
 }
 
 int32_t convert_to_int_round_nearest(fp_int x) 
