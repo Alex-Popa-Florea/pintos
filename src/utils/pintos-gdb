@@ -4,7 +4,7 @@
 
 # Relative path to GDB macros file within Pintos repo.  
 # Customize for your machine if required.
-GDBMACROS=../../misc/gdb-macros
+GDBMACROS=$HOME/University/Year2/Pintos/pintos_48/src/misc/gdb-macros
 
 # Choose correct GDB.
 if command -v i386-elf-gdb >/dev/null 2>&1; then
