@@ -188,20 +188,29 @@ lock_init (struct lock *lock)
 
 int
 get_donated_priority (struct thread *thread) {
-  struct list_elem *priority_elem = list_begin (&priorities);
-  int priority = thread->priority;
-  int new_priority;
-  while (priority_elem != list_tail (&priorities)) {
-    if (list_entry (priority_elem, struct priority_lock, priority_elem)->lock->holder == thread) {
-      struct thread *needer = list_entry (priority_elem, struct priority_lock, priority_elem)->needer;
-      new_priority = get_donated_priority (needer);
-      if (new_priority > priority) {
-        priority = new_priority;
+  int donated_priority = thread->priority;
+
+  // Iterate through all the locks held by the current thread
+  struct list_elem *current_lock_elem = list_begin(&thread->lock_list);
+  while (current_lock_elem != list_tail(&thread->lock_list)) {
+    struct lock *current_lock = list_entry (current_lock_elem, struct lock, elem);
+    
+    // Iterates through all the threads waiting on a lock
+    struct list_elem *current_waiter_elem = list_begin(&(current_lock->semaphore.waiters));
+    while (current_waiter_elem != list_tail(&(current_lock->semaphore.waiters))) {
+      struct thread *current_waiter = list_entry (current_waiter_elem, struct thread, elem);
+      // Recursively compute the donated priority of waiting threads
+      current_waiter->donated_priority = get_donated_priority(current_waiter);
+      if (current_waiter->donated_priority > donated_priority) {
+        donated_priority = current_waiter->donated_priority;
       }
+      current_waiter_elem = current_waiter_elem->next;
     }
-    priority_elem = priority_elem->next;
+
+    current_lock_elem = current_lock_elem->next;
   }
-  return priority;
+
+  return donated_priority;
 }
 
 /* Acquires LOCK, sleeping until it becomes available if
@@ -218,23 +227,17 @@ lock_acquire (struct lock *lock)
   ASSERT (lock != NULL);
   ASSERT (!intr_context ());
   ASSERT (!lock_held_by_current_thread (lock));
-
-  //enum intr_level curr_lvl = intr_disable();
-
-  struct thread *thread = thread_current ();
+  
   if(!lock_try_acquire(lock)){
-    struct priority_lock priority_lock;
-  
-    priority_lock.lock = lock;
-    priority_lock.needer = thread;
-    list_push_back (&priorities, &priority_lock.priority_elem);
-    lock->holder->donated_priority = get_donated_priority (lock->holder);
-  
+    // Compute donated priority of the thread now holding the lock
+    int current_thread_donated_priority = get_donated_priority (thread_current());
+    // lock->holder->donated_priority = get_donated_priority (lock->holder); 
+    if (current_thread_donated_priority >= lock->holder->donated_priority) {
+      lock->holder->donated_priority = current_thread_donated_priority;
+    }
     sema_down (&lock->semaphore);
-    lock->holder = thread;
+    lock->holder = thread_current ();
   }
-
-  //intr_set_level(curr_lvl);
 }
 
 /* Tries to acquires LOCK and returns true if successful or false
@@ -268,18 +271,11 @@ lock_release (struct lock *lock)
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
 
-  struct list_elem *priority_elem = list_begin (&priorities);
-  while (priority_elem != list_tail (&priorities)) {
-    struct priority_lock *priority_lock = list_entry (priority_elem, struct priority_lock, priority_elem);
-    if (priority_lock->lock == lock) {
-      list_remove (priority_elem);
-    }
-    priority_elem = priority_elem->next;
-  }
-  lock->holder->donated_priority = lock->holder->priority;
+  struct thread *initial_holder = lock->holder;
   
   lock->holder = NULL;
   sema_up (&lock->semaphore);
+  initial_holder->donated_priority = get_donated_priority(lock->holder);
 }
 
 /* Returns true if the current thread holds LOCK, false
