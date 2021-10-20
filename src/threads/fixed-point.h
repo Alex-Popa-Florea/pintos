@@ -14,16 +14,16 @@ typedef struct fp_int {
     int32_t val; /* Value of fixed-point integer */
 } fp_int;
 
-fp_int inline convert_to_fixed_point(int32_t );
-int32_t inline convert_to_int_round_zero(fp_int );
-int32_t inline convert_to_int_round_nearest(fp_int );
-fp_int inline add_fixed_points(fp_int , fp_int );
-fp_int inline add_fixed_point_and_integer(fp_int , int32_t );
-fp_int inline subtract_fixed_points(fp_int , fp_int );
-fp_int inline subtract_fixed_point_and_integer(fp_int , int32_t );
-fp_int inline multiply_fixed_points(fp_int , fp_int );
-fp_int inline multiply_fixed_point_and_integer(fp_int , int32_t );
-fp_int inline divide_fixed_points(fp_int , fp_int );
-fp_int inline divide_fixed_point_and_integer(fp_int , int32_t );
+fp_int inline convert_fp(int32_t );
+int32_t inline convert__int_zero(fp_int );
+int32_t inline convert_int_nearest(fp_int );
+fp_int inline add_fps(fp_int , fp_int );
+fp_int inline add_fps_int(fp_int , int32_t );
+fp_int inline sub_fps(fp_int , fp_int );
+fp_int inline sub_fps_int(fp_int , int32_t );
+fp_int inline mult_fps(fp_int , fp_int );
+fp_int inline mult_fps_int(fp_int , int32_t );
+fp_int inline div_fps(fp_int , fp_int );
+fp_int inline div_fps_int(fp_int , int32_t );
 
 #endif /* threads/fixed-point.h */

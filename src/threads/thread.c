@@ -618,13 +618,21 @@ uint32_t thread_stack_ofs = offsetof (struct thread, stack);
 /* Calculates priority of thread based on niceness and CPU usage */
 static int calculate_priority(struct thread *t) 
 {
-
+  int priority = PRI_MAX - convert_int_nearest(div_fps_int(t->recent_cpu, 4)) - (t->nice * 2);
+  if (priority < PRI_MIN) {
+    return PRI_MIN;
+  } else if (priority > PRI_MAX) {
+    return PRI_MAX;
+  }
+  return priority;
 }
 
 /* Calculates CPU usesage of thread */
 static fp_int calculate_recent_cpu(struct thread *t)
 {
-
+  fp_int recent_cpu = t->recent_cpu;
+  fp_int double_recent_cpu = mult_fps_int(recent_cpu, 2);
+  return add_fps_int(mult_fps(div_fps(double_recent_cpu, add_fps_int(double_recent_cpu, 1)), recent_cpu), t->nice);
 }
 
 /* Calculates new system load_avg */

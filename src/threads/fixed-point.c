@@ -8,56 +8,68 @@
 #include "userprog/process.h"
 #endif
 
-fp_int inline convert_to_fixed_point(int32_t n) 
+/* Converts an integer to fixed-point */
+fp_int inline convert_fp(int32_t n)
 {
     return (fp_int){n * FIXED_F};
 }
 
-int32_t inline convert_to_int_round_zero(fp_int x) 
+/* Converts fixed-point to integer (rounding to zero) */
+int32_t inline convert__int_zero(fp_int x)
 {
     return (int32_t) x.val / FIXED_F;
 }
 
-int32_t inline convert_to_int_round_nearest(fp_int x) 
+/* Converts fixed-point to integer (rounding to nearest int) */
+int32_t inline convert_int_nearest(fp_int x)
 {
     return (int32_t) x.val >= 0 ? (x.val + FIXED_F/2 ) /FIXED_F : (x.val - FIXED_F/2 ) /FIXED_F;
 }
-fp_int inline add_fixed_points(fp_int x, fp_int y)
+
+/* Adds two fixed-point numbers */
+fp_int inline add_fps(fp_int x, fp_int y)
 {
     return (fp_int){x.val + y.val};
 }
 
-fp_int inline add_fixed_point_and_integer(fp_int x, int32_t n)
+/* Adds two fixed-point numbers */
+fp_int inline add_fps_int(fp_int x, int32_t n)
 {
     return (fp_int){ x.val + n*FIXED_F};
 }
 
-fp_int inline subtract_fixed_points(fp_int x, fp_int y)
+/* Subtract two fixed-point numbers */
+fp_int inline sub_fps(fp_int x, fp_int y)
 {
     return (fp_int){x.val - y.val};
 }
 
-fp_int inline subtract_fixed_point_and_integer(fp_int x, int32_t n)
+/* Subtract integer from fixed-point number */
+fp_int inline sub_fps_int(fp_int x, int32_t n)
 {
     return (fp_int){x.val - n*FIXED_F};
 }
 
-fp_int inline multiply_fixed_points(fp_int x, fp_int y)
+/* Multiply two fixed point numbers */
+fp_int inline mult_fps(fp_int x, fp_int y)
 {
     return (fp_int){((int64_t) x.val) * y.val/FIXED_F};
 }
 
-fp_int inline multiply_fixed_point_and_integer(fp_int x, int32_t n)
+/* Multiply fixed-point and int */
+fp_int inline mult_fps_int(fp_int x, int32_t n)
 {
     return (fp_int){x.val * n};
 }
 
-fp_int inline divide_fixed_points(fp_int x, fp_int y)
+/* Divide fixed-point numbers */
+fp_int inline div_fps(fp_int x, fp_int y)
 {
     return (fp_int){((int64_t) x.val) * FIXED_F/y.val};
 }
 
-fp_int inline divide_fixed_point_and_integer(fp_int x, int32_t n)
+/* Divide fixed-point number by an int */
+fp_int inline div_fps_int(fp_int x, int32_t n)
 {
     return (fp_int){x.val/n};
 }
