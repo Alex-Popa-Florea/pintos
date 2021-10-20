@@ -2,13 +2,16 @@
 #define THREADS_FIXED_POINT_H
 #include "lib/inttypes.h"
 
+/* Module supports fixed-point arithmetic in
+the following p.q fixed-point format: */
 #define FIXED_P (17)
 #define FIXED_Q (14)
-//this is fine - fixing them makes them less costly at runtime for the compiler
-#define FIXED_F (1 << FIXED_Q)
+/* Define f = 2 ^ q as the following macro: */
+#define FIXED_F (1 << FIXED_Q) 
 
+/* Structure to represent fixed-point integers */
 typedef struct fp_int {
-    int32_t val;
+    int32_t val; /* Value of fixed-point integer */
 } fp_int;
 
 fp_int inline convert_to_fixed_point(int32_t );
