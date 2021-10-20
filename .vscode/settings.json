@@ -1,5 +1,7 @@
 {
     "files.associations": {
-        "interrupt.h": "c"
+        "interrupt.h": "c",
+        "atomic": "cpp",
+        "cstdint": "cpp"
     }
 }

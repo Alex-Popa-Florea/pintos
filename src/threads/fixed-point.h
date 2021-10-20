@@ -4,6 +4,7 @@
 
 #define FIXED_P (17)
 #define FIXED_Q (14)
+//this is fine - fixing them makes them less costly at runtime for the compiler
 #define FIXED_F (1 << FIXED_Q)
 
 typedef struct fp_int {

@@ -8,9 +8,9 @@
 #include "userprog/process.h"
 #endif
 
-fp_int convert_to_fixed_point(int32_t n) 
+fp_int inline convert_to_fixed_point(int32_t n) 
 {
-
+    return (fp_int) {n * FIXED_F};
 }
 
 int32_t convert_to_int_round_zero(fp_int x) 
@@ -59,5 +59,5 @@ fp_int divide_fixed_points(fp_int x, fp_int y)
 
 fp_int divide_fixed_point_and_integer(fp_int x, int32_t n)
 {
-    
+
 }
