@@ -32,6 +32,8 @@
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 
+struct list priorities = LIST_INITIALIZER(priorities);
+
 /* Initializes semaphore SEMA to VALUE.  A semaphore is a
    nonnegative integer along with two atomic operators for
    manipulating it:
@@ -184,6 +186,24 @@ lock_init (struct lock *lock)
   sema_init (&lock->semaphore, 1);
 }
 
+int
+get_donated_priority (struct thread *thread) {
+  struct list_elem *priority_elem = list_begin (&priorities);
+  int priority = thread->priority;
+  int new_priority;
+  while (priority_elem != list_tail (&priorities)) {
+    if (list_entry (priority_elem, struct priority_lock, priority_elem)->lock->holder == thread) {
+      struct thread *needer = list_entry (priority_elem, struct priority_lock, priority_elem)->needer;
+      new_priority = get_donated_priority (needer);
+      if (new_priority > priority) {
+        priority = new_priority;
+      }
+    }
+    priority_elem = priority_elem->next;
+  }
+  return priority;
+}
+
 /* Acquires LOCK, sleeping until it becomes available if
    necessary.  The lock must not already be held by the current
    thread.
@@ -199,8 +219,22 @@ lock_acquire (struct lock *lock)
   ASSERT (!intr_context ());
   ASSERT (!lock_held_by_current_thread (lock));
 
-  sema_down (&lock->semaphore);
-  lock->holder = thread_current ();
+  //enum intr_level curr_lvl = intr_disable();
+
+  struct thread *thread = thread_current ();
+  if(!lock_try_acquire(lock)){
+    struct priority_lock priority_lock;
+  
+    priority_lock.lock = lock;
+    priority_lock.needer = thread;
+    list_push_back (&priorities, &priority_lock.priority_elem);
+    lock->holder->donated_priority = get_donated_priority (lock->holder);
+  
+    sema_down (&lock->semaphore);
+    lock->holder = thread;
+  }
+
+  //intr_set_level(curr_lvl);
 }
 
 /* Tries to acquires LOCK and returns true if successful or false
@@ -234,6 +268,16 @@ lock_release (struct lock *lock)
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
 
+  struct list_elem *priority_elem = list_begin (&priorities);
+  while (priority_elem != list_tail (&priorities)) {
+    struct priority_lock *priority_lock = list_entry (priority_elem, struct priority_lock, priority_elem);
+    if (priority_lock->lock == lock) {
+      list_remove (priority_elem);
+    }
+    priority_elem = priority_elem->next;
+  }
+  lock->holder->donated_priority = lock->holder->priority;
+  
   lock->holder = NULL;
   sema_up (&lock->semaphore);
 }
