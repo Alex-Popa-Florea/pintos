@@ -59,6 +59,9 @@ static unsigned thread_ticks;   /* # of timer ticks since last yield. */
    Controlled by kernel command-line option "-mlfqs". */
 bool thread_mlfqs;
 
+/* Moving average of number of threads ready to run */
+fp_int load_avg = {0};
+
 static void kernel_thread (thread_func *, void *aux);
 
 static void idle (void *aux UNUSED);
@@ -70,6 +73,11 @@ static void *alloc_frame (struct thread *, size_t size);
 static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
+
+/* Helper functions for BSD scheduler */
+static int calculate_priority(struct thread *);
+static fp_int calculate_recent_cpu(struct thread *);
+static fp_int calculate_load_avg(struct thread *);
 
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
@@ -606,3 +614,21 @@ allocate_tid (void)
 /* Offset of `stack' member within `struct thread'.
    Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);
+
+/* Calculates priority of thread based on niceness and CPU usage */
+static int calculate_priority(struct thread *t) 
+{
+
+}
+
+/* Calculates CPU usesage of thread */
+static fp_int calculate_recent_cpu(struct thread *t)
+{
+
+}
+
+/* Calculates new system load_avg */
+static fp_int calculate_load_avg(struct thread *t)
+{
+
+}
