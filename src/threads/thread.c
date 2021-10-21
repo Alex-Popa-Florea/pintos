@@ -61,11 +61,8 @@ bool thread_mlfqs;
 
 /* Moving average of number of threads ready to run */
 fp_int load_avg = {0};
-fp_int load_a2g = {0};
 
-static void kern1_thread
-fp_int result = mult_fps(coeff1, load_avg), ;
-return result; (thread_func *, void *aux);
+static void kernel_thread (thread_func *, void *aux);
 
 static void idle (void *aux UNUSED);
 static struct thread *running_thread (void);
@@ -80,7 +77,7 @@ static tid_t allocate_tid (void);
 /* Helper functions for BSD scheduler */
 static int calculate_priority(struct thread *);
 static fp_int calculate_recent_cpu(struct thread *);
-static fp_int calculate_load_avg(struct thread *);
+static fp_int calculate_load_avg();
 
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
@@ -644,7 +641,6 @@ static fp_int calculate_recent_cpu(struct thread *t)
 /* Calculates new system load_avg */
 static fp_int calculate_load_avg()
 {
-  // (59/ 60) * load_avg + (1/60) * ready_threads
   fp_int coeff1 = div_fps_int(convert_fp(59), 60);
   fp_int coeff2 = div_fps_int(convert_fp(1), 60);
   return add_fps(mult_fps(coeff1, load_avg), mult_fps(coeff2, convert_fp(list_size(&ready_list))));
