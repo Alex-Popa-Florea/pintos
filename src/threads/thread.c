@@ -11,6 +11,7 @@
 #include "threads/switch.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
+#include "devices/timer.h"
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
@@ -75,6 +76,7 @@ void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
 
 /* Helper functions for BSD scheduler */
+
 static int calculate_priority(struct thread *);
 static fp_int calculate_recent_cpu(struct thread *);
 static fp_int calculate_load_avg();
@@ -106,6 +108,7 @@ thread_init (void)
   init_thread (initial_thread, "main", PRI_DEFAULT);
   initial_thread->status = THREAD_RUNNING;
   initial_thread->tid = allocate_tid ();
+  initial_thread->recent_cpu = (fp_int){0};
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.
@@ -147,7 +150,7 @@ void
 thread_tick (void) 
 {
   struct thread *t = thread_current ();
-
+  
   /* Update statistics. */
   if (t == idle_thread)
     idle_ticks++;
@@ -157,7 +160,12 @@ thread_tick (void)
 #endif
   else
     kernel_ticks++;
+    t->recent_cpu = add_fps_int(t->recent_cpu,1);
 
+  if(timer_ticks () % TIMER_FREQ == 0){
+    t->recent_cpu = calculate_recent_cpu(t);
+  }
+    
   /* Enforce preemption. */
   if (++thread_ticks >= TIME_SLICE)
     intr_yield_on_return ();
@@ -379,33 +387,35 @@ thread_get_priority (void)
 
 /* Sets the current thread's nice value to NICE. */
 void
-thread_set_nice (int nice UNUSED) 
+thread_set_nice (int nice) 
 {
-  /* Not yet implemented. */
+  struct thread* cur = thread_current();
+  cur->nice = nice;
+  cur->priority = calculate_priority(cur);
+  if (list_entry(list_tail(&ready_list),struct thread,elem)->priority > cur->priority){
+    thread_yield();
+  }
 }
 
 /* Returns the current thread's nice value. */
 int
 thread_get_nice (void) 
 {
-  /* Not yet implemented. */
-  return 0;
+  return thread_current()->nice;
 }
 
 /* Returns 100 times the system load average. */
 int
 thread_get_load_avg (void) 
 {
-  /* Not yet implemented. */
-  return 0;
+  return convert_int_nearest(mult_fps_int(load_avg,100));
 }
 
 /* Returns 100 times the current thread's recent_cpu value. */
 int
 thread_get_recent_cpu (void) 
 {
-  /* Not yet implemented. */
-  return 0;
+  return convert_int_nearest(mult_fps_int(thread_current()->recent_cpu,100));
 }
 
 /* Idle thread.  Executes when no other thread is ready to run.
@@ -493,6 +503,7 @@ init_thread (struct thread *t, const char *name, int priority)
   t->status = THREAD_BLOCKED;
   strlcpy (t->name, name, sizeof t->name);
   t->stack = (uint8_t *) t + PGSIZE;
+  t->recent_cpu = thread_current()->recent_cpu;
   t->priority = priority;
   t->magic = THREAD_MAGIC;
 
@@ -638,8 +649,9 @@ static fp_int calculate_recent_cpu(struct thread *t)
                      t->nice);
 }
 
+
 /* Calculates new system load_avg */
-static fp_int calculate_load_avg()
+static fp_int calculate_load_avg(struct thread *t)
 {
   fp_int coeff1 = div_fps_int(convert_fp(59), 60);
   fp_int coeff2 = div_fps_int(convert_fp(1), 60);
