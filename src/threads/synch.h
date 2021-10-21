@@ -45,14 +45,6 @@ void cond_signal (struct condition *, struct lock *);
 void cond_broadcast (struct condition *, struct lock *);
 
 void compute_priorities (struct thread *thread);
-int get_donated_priority (struct thread *thread);
-
-struct lock_waiters
-  {
-    struct lock *lock;
-    struct thread *needer;
-    struct list_elem elem;
-  };
 
 /* Optimization barrier.
 
