@@ -4,6 +4,7 @@
 #include <random.h>
 #include <stdio.h>
 #include <string.h>
+#include "threads/fixed-point.h"
 #include "threads/flags.h"
 #include "threads/interrupt.h"
 #include "threads/intr-stubs.h"
@@ -79,7 +80,7 @@ static tid_t allocate_tid (void);
 
 static int calculate_priority(struct thread *);
 static fp_int calculate_recent_cpu(struct thread *);
-static fp_int calculate_load_avg();
+static fp_int calculate_load_avg(void);
 
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
@@ -109,6 +110,7 @@ thread_init (void)
   initial_thread->status = THREAD_RUNNING;
   initial_thread->tid = allocate_tid ();
   initial_thread->recent_cpu = (fp_int){0};
+  initial_thread->nice = 0;
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.
@@ -152,17 +154,22 @@ thread_tick (void)
   struct thread *t = thread_current ();
   
   /* Update statistics. */
-  if (t == idle_thread)
+  if (t == idle_thread) {
     idle_ticks++;
+  }
 #ifdef USERPROG
   else if (t->pagedir != NULL)
     user_ticks++;
 #endif
-  else
+  else {
     kernel_ticks++;
     t->recent_cpu = add_fps_int(t->recent_cpu,1);
-
-  if(timer_ticks () % TIMER_FREQ == 0){
+  }
+  if (timer_ticks () % TIME_SLICE == 0) {
+    t->priority = calculate_priority(t);
+  }
+  if(timer_ticks () % TIMER_FREQ == 0) {
+    load_avg = calculate_load_avg();
     t->recent_cpu = calculate_recent_cpu(t);
   }
     
@@ -504,7 +511,8 @@ init_thread (struct thread *t, const char *name, int priority)
   strlcpy (t->name, name, sizeof t->name);
   t->stack = (uint8_t *) t + PGSIZE;
   t->recent_cpu = thread_current()->recent_cpu;
-  t->priority = priority;
+  t->priority = thread_mlfqs ? calculate_priority(t) : priority;
+  t->nice = thread_current()->nice;
   t->magic = THREAD_MAGIC;
 
   old_level = intr_disable ();
@@ -643,6 +651,7 @@ static fp_int calculate_recent_cpu(struct thread *t)
 {
   fp_int recent_cpu = t->recent_cpu;
   fp_int double_recent_cpu = mult_fps_int(recent_cpu, 2);
+  
   return add_fps_int(mult_fps(div_fps(double_recent_cpu, 
                                       add_fps_int(double_recent_cpu, 1)), 
                               recent_cpu),
@@ -651,7 +660,7 @@ static fp_int calculate_recent_cpu(struct thread *t)
 
 
 /* Calculates new system load_avg */
-static fp_int calculate_load_avg(struct thread *t)
+static fp_int calculate_load_avg()
 {
   fp_int coeff1 = div_fps_int(convert_fp(59), 60);
   fp_int coeff2 = div_fps_int(convert_fp(1), 60);
