@@ -90,8 +90,8 @@ struct thread
 
     int priority;                       /* Priority. */
     int donated_priority;               /* Highest priority donated by threads waiting */
-    struct list lock_list;              /* List to store all locks held by the thread */
-    struct lock *needed_lock;           /* Pointer to lock needed by the thread */
+    struct list held_locks;             /* List to store all locks held by the thread */
+    struct lock *needed_lock;           /* Pointer to lock currently needed by the thread */
 
     struct list_elem allelem;           /* List element for all threads list. */
     /* Shared between thread.c and synch.c. */

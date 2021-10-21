@@ -188,32 +188,6 @@ lock_init (struct lock *lock)
   sema_init (&lock->semaphore, 1);
 }
 
-int
-get_donated_priority (struct thread *thread) {
-  int donated_priority = thread->priority;
-
-  // Iterate through all the locks held by the current thread
-  struct list_elem *current_lock_elem = list_begin(&thread->lock_list);
-  while (current_lock_elem != list_tail(&thread->lock_list)) {
-    struct lock *current_lock = list_entry (current_lock_elem, struct lock, elem);
-    
-    // Iterates through all the threads waiting on a lock
-    struct list_elem *current_waiter_elem = list_begin(&(current_lock->semaphore.waiters));
-    while (current_waiter_elem != list_tail(&(current_lock->semaphore.waiters))) {
-      struct thread *current_waiter = list_entry (current_waiter_elem, struct thread, elem);
-      // Recursively compute the donated priority of waiting threads
-      current_waiter->donated_priority = get_donated_priority(current_waiter);
-      if (current_waiter->donated_priority > donated_priority) {
-        donated_priority = current_waiter->donated_priority;
-      }
-      current_waiter_elem = current_waiter_elem->next;
-    }
-
-    current_lock_elem = current_lock_elem->next;
-  }
-
-  return donated_priority;
-}
 
 void
 compute_priorities (struct thread *thread) {
@@ -221,8 +195,13 @@ compute_priorities (struct thread *thread) {
   if (thread->donated_priority > thread->priority) {
     new_priority = thread->donated_priority;
   }
+
+  // Recursively proceed down lock chain if the thread needs a lock
   if (thread->needed_lock) {
     thread->needed_lock->holder->donated_priority = new_priority;
+    if (thread->needed_lock->max_donated_priority_of_waiters < new_priority) {
+      thread->needed_lock->max_donated_priority_of_waiters = new_priority;
+    }
     compute_priorities (thread->needed_lock->holder);
   }
 }
@@ -244,23 +223,18 @@ lock_acquire (struct lock *lock)
 
   if(!lock_try_acquire(lock)){
     thread_current ()->needed_lock = lock;
-    
-    lock->holder->donated_priority = thread_current ()->donated_priority;
-
     compute_priorities (thread_current ());
-
     sema_down (&lock->semaphore);
     lock->holder = thread_current ();
     thread_current ()->needed_lock = NULL;
   }
-  lock->holder_priority_before_donation = lock->holder->donated_priority;
 
-  enum intr_level old_level;
-  old_level = intr_disable ();
+  // enum intr_level old_level;
+  // old_level = intr_disable ();
 
-  list_push_back(&thread_current ()->lock_list, &lock->elem);
+  list_push_back(&thread_current ()->held_locks, &lock->elem);
 
-  intr_set_level (old_level);
+  //intr_set_level (old_level);
 }
 
 /* Tries to acquires LOCK and returns true if successful or false
@@ -293,20 +267,21 @@ lock_release (struct lock *lock)
 {
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
-
-  thread_current ()->donated_priority = lock->holder_priority_before_donation;
-  compute_priorities (thread_current ());
-  
-  enum intr_level old_level;
-  old_level = intr_disable ();
-
+  // The current thread no longer holds this lock
   list_remove (&lock->elem);
+  int remaining_donated_priority = PRI_MIN;
+  // Loop through the other locks held by the current thread
+  struct list_elem *current_lock_elem = list_begin(&thread_current()->held_locks);
+  while (current_lock_elem != list_tail(&thread_current()->held_locks)) {
+    struct lock *current_lock = list_entry (current_lock_elem, struct lock, elem);
+    if (remaining_donated_priority < current_lock->max_donated_priority_of_waiters) {
+      remaining_donated_priority = current_lock->max_donated_priority_of_waiters;
+    }
+    current_lock_elem = current_lock_elem->next;
+  }
 
-  intr_set_level (old_level);
-
+  thread_current()->donated_priority = remaining_donated_priority;
   lock->holder = NULL;
-  lock->holder_priority_before_donation = PRI_MIN;
-
   sema_up (&lock->semaphore);
 }
 
