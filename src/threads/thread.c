@@ -102,21 +102,6 @@ thread_init (void)
 
 /* Starts preemptive thread scheduling by enabling interrupts.
    Also creates the idle thread. */
-bool
-is_thread_lower_priority (const struct list_elem *a,
-                       const struct list_elem *b,
-                       void *aux UNUSED)
-{
-  int priority1 = list_entry(a, struct thread, elem)->donated_priority;
-  if (priority1 < list_entry(a, struct thread, elem)->priority) {
-    priority1 = list_entry(a, struct thread, elem)->priority;
-  }
-  int priority2 = list_entry(b, struct thread, elem)->donated_priority;
-  if (priority2 < list_entry(b, struct thread, elem)->priority) {
-    priority2 = list_entry(b, struct thread, elem)->priority;
-  }
-  return priority1 < priority2;
-}
 void
 thread_start (void) 
 {
@@ -364,6 +349,31 @@ thread_foreach (thread_action_func *func, void *aux)
     }
 }
 
+/* Comparison function of the effective priorities of threads */
+bool
+is_thread_lower_priority (const struct list_elem *a,
+                          const struct list_elem *b,
+                          void *aux UNUSED)
+{
+  struct thread *t1 = list_entry(a, struct thread, elem);
+  int effective_priority1 = get_effective_priority(t1);
+  struct thread *t2 = list_entry(b, struct thread, elem);
+  int effective_priority2 = get_effective_priority(t2);
+  return effective_priority1 < effective_priority2;
+}
+
+
+/* Returns the effective priority of a thread, the max of its actual and donated priority */
+int
+get_effective_priority(struct thread *t)
+{
+  int effective_priority = t->priority;
+  if (t->donated_priority > effective_priority) {
+    effective_priority = t->donated_priority;
+  }
+  return effective_priority;
+}
+
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void
 thread_set_priority (int new_priority) 
@@ -373,8 +383,8 @@ thread_set_priority (int new_priority)
   int max_priority_from_locks = new_priority;
 
   // Loop through all the locks held by the thread to see if it should now be donated priority
-  struct list_elem *current_lock_elem = list_begin(&thread_current ()->held_locks);
-  while (current_lock_elem != list_tail(&thread_current ()->held_locks)) {
+  struct list_elem *current_lock_elem = list_begin (&thread_current ()->held_locks);
+  while (current_lock_elem != list_tail (&thread_current ()->held_locks)) {
     struct lock *current_lock = list_entry (current_lock_elem, struct lock, elem);
     if (max_priority_from_locks < current_lock->max_donated_priority_of_waiters) {
       max_priority_from_locks = current_lock->max_donated_priority_of_waiters;
@@ -390,11 +400,7 @@ thread_set_priority (int new_priority)
 int
 thread_get_priority (void) 
 {
-  int thread_priority = thread_current ()->donated_priority;
-  if (thread_current ()->priority > thread_current ()->donated_priority) {
-    thread_priority = thread_current ()->priority;
-  } 
-  return thread_priority;
+  return (get_effective_priority (thread_current ()));
 }
 
 /* Sets the current thread's nice value to NICE. */

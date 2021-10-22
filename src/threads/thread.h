@@ -89,7 +89,8 @@ struct thread
     uint8_t *stack;                     /* Saved stack pointer. */
 
     int priority;                       /* Priority. */
-    int donated_priority;               /* Highest priority donated by threads waiting */
+    int donated_priority;               /* Highest priority donated by threads (in)directly waiting on its locks */
+
     struct list held_locks;             /* List to store all locks held by the thread */
     struct lock *needed_lock;           /* Pointer to lock currently needed by the thread */
 
@@ -111,10 +112,7 @@ struct thread
    Controlled by kernel command-line option "mlfqs". */
 extern bool thread_mlfqs;
 
-bool
-is_thread_lower_priority (const struct list_elem *a,
-                       const struct list_elem *b,
-                       void *aux);
+
 void thread_init (void);
 void thread_start (void);
 size_t threads_ready(void);
@@ -139,8 +137,14 @@ void thread_yield (void);
 typedef void thread_action_func (struct thread *t, void *aux);
 void thread_foreach (thread_action_func *, void *);
 
+bool
+is_thread_lower_priority (const struct list_elem *a,
+                          const struct list_elem *b,
+                          void *aux);
+int get_effective_priority (struct thread *t);
 int thread_get_priority (void);
 void thread_set_priority (int);
+
 
 int thread_get_nice (void);
 void thread_set_nice (int);

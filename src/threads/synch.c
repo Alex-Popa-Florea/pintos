@@ -191,16 +191,14 @@ lock_init (struct lock *lock)
 
 void
 compute_priorities (struct thread *thread) {
-  int new_priority = thread->priority;
-  if (thread->donated_priority > thread->priority) {
-    new_priority = thread->donated_priority;
-  }
+  int effective_priority = get_effective_priority (thread);
 
-  // Recursively proceed down lock chain if the thread needs a lock
+  // If the thread needs a lock, recursively proceed down the lock chain
   if (thread->needed_lock) {
-    thread->needed_lock->holder->donated_priority = new_priority;
-    if (thread->needed_lock->max_donated_priority_of_waiters < new_priority) {
-      thread->needed_lock->max_donated_priority_of_waiters = new_priority;
+    // Give the thread holding the lock the donated priority if it is higher
+    thread->needed_lock->holder->donated_priority = effective_priority;
+    if (thread->needed_lock->max_donated_priority_of_waiters < effective_priority) {
+      thread->needed_lock->max_donated_priority_of_waiters = effective_priority;
     }
     compute_priorities (thread->needed_lock->holder);
   }
@@ -229,12 +227,7 @@ lock_acquire (struct lock *lock)
     thread_current ()->needed_lock = NULL;
   }
 
-  // enum intr_level old_level;
-  // old_level = intr_disable ();
-
   list_push_back(&thread_current ()->held_locks, &lock->elem);
-
-  //intr_set_level (old_level);
 }
 
 /* Tries to acquires LOCK and returns true if successful or false
@@ -269,8 +262,10 @@ lock_release (struct lock *lock)
   ASSERT (lock_held_by_current_thread (lock));
   // The current thread no longer holds this lock
   list_remove (&lock->elem);
+
+  // Calculate the remaining donated priority held by the current thread
   int remaining_donated_priority = PRI_MIN;
-  // Loop through the other locks held by the current thread
+  // Loop through the remaining locks held by the current thread
   struct list_elem *current_lock_elem = list_begin(&thread_current ()->held_locks);
   while (current_lock_elem != list_tail(&thread_current ()->held_locks)) {
     struct lock *current_lock = list_entry (current_lock_elem, struct lock, elem);
@@ -279,8 +274,8 @@ lock_release (struct lock *lock)
     }
     current_lock_elem = current_lock_elem->next;
   }
-
   thread_current ()->donated_priority = remaining_donated_priority;
+  
   lock->holder = NULL;
 
   int max_priority_of_waiting_threads = PRI_MIN;
