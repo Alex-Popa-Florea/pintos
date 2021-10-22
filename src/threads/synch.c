@@ -285,15 +285,24 @@ lock_release (struct lock *lock)
   lock->holder = NULL;
 
   int max_priority_of_waiting_threads = PRI_MIN;
-  struct thread *highest_priority_waiter = list_entry (list_max (&lock->semaphore.waiters, is_thread_lower_priority, NULL), struct thread, elem);
-  int highest_effective_priority = get_effective_priority (highest_priority_waiter);
-  if (max_priority_of_waiting_threads < highest_effective_priority) {
-    max_priority_of_waiting_threads = highest_effective_priority;
+
+  struct list_elem *highest_priority_waiter_elem = list_begin (&lock->semaphore.waiters);
+  
+  while (highest_priority_waiter_elem != list_tail (&lock->semaphore.waiters)) {
+    struct thread *highest_priority_waiter = list_entry (highest_priority_waiter_elem, struct thread, elem);
+    if (highest_priority_waiter != thread_current ()) {
+      if (max_priority_of_waiting_threads < get_effective_priority(highest_priority_waiter)) {
+        max_priority_of_waiting_threads = get_effective_priority(highest_priority_waiter);
+      }
+    }
+    
+    highest_priority_waiter_elem = highest_priority_waiter_elem->next;
   }
 
   lock->max_donated_priority_of_waiters = max_priority_of_waiting_threads;
   sema_up (&lock->semaphore);
 }
+
 
 /* Returns true if the current thread holds LOCK, false
    otherwise.  (Note that testing whether some other thread holds
