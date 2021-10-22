@@ -1,6 +1,6 @@
 #ifndef THREADS_FIXED_POINT_H
 #define THREADS_FIXED_POINT_H
-#include "lib/inttypes.h"
+#include "lib/stdint.h"
 
 /* Module supports fixed-point arithmetic in
 the following p.q fixed-point format: */

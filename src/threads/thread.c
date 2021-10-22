@@ -13,6 +13,7 @@
 #include "threads/synch.h"
 #include "threads/vaddr.h"
 #include "devices/timer.h"
+
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
@@ -29,6 +30,9 @@ static struct list ready_list;
 /* List of all processes.  Processes are added to this list
    when they are first scheduled and removed when they exit. */
 static struct list all_list;
+
+/*List of queue with the respective priority*/
+static struct list multqueue;
 
 /* Idle thread. */
 static struct thread *idle_thread;
@@ -103,6 +107,7 @@ thread_init (void)
   lock_init (&tid_lock);
   list_init (&ready_list);
   list_init (&all_list);
+  list_init (&multqueue);
 
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
@@ -143,7 +148,7 @@ thread_start (void)
 size_t
 threads_ready (void)
 {
-  return list_size (&ready_list);      
+  return list_size (&ready_list);   /* loop over queues and sum up lenghts*/
 }
 
 /* Called by the timer interrupt handler at each timer tick.
@@ -284,7 +289,7 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  list_insert_ordered(&ready_list, &t->elem,is_thread_lower_priority,NULL);
+  list_insert_ordered(&ready_list, &t->elem,is_thread_lower_priority,NULL);  //add to multqueue given priority
   t->status = THREAD_READY;
   intr_set_level (old_level);
 }
@@ -338,7 +343,7 @@ thread_exit (void)
      when it calls thread_schedule_tail(). */
   intr_disable ();
   list_remove (&thread_current()->allelem);
-  thread_current ()->status = THREAD_DYING;
+  thread_current ()->status = THREAD_DYING;  //multqueue remove thread from respective queue
   schedule ();
   NOT_REACHED ();
 }
@@ -355,7 +360,7 @@ thread_yield (void)
 
   old_level = intr_disable ();
   if (cur != idle_thread) 
-    list_push_back (&ready_list, &cur->elem);
+    list_push_back (&ready_list, &cur->elem); //add to multqueue given priority
   cur->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
@@ -399,7 +404,7 @@ thread_set_nice (int nice)
   struct thread* cur = thread_current();
   cur->nice = nice;
   cur->priority = calculate_priority(cur);
-  if (list_entry(list_tail(&ready_list),struct thread,elem)->priority > cur->priority){
+  if (list_entry(list_tail(&ready_list),struct thread,elem)->priority > cur->priority){ //check multqueue not readylist
     thread_yield();
   }
 }
@@ -542,9 +547,9 @@ static struct thread *
 next_thread_to_run (void) 
 {
   if (list_empty (&ready_list))
-    return idle_thread;
+    return idle_thread; 
   else
-    return list_entry (list_pop_back (&ready_list), struct thread, elem);
+    return list_entry (list_pop_back (&ready_list), struct thread, elem);  //replace ready_list wiht multqueue
 }
 
 /* Completes a thread switch by activating the new thread's page
@@ -562,7 +567,7 @@ next_thread_to_run (void)
    added at the end of the function.
 
    After this function and its caller returns, the thread switch
-   is complete. */
+   is complete.  */
 void
 thread_schedule_tail (struct thread *prev)
 {
@@ -666,3 +671,9 @@ static fp_int calculate_load_avg()
   fp_int coeff2 = div_fps_int(convert_fp(1), 60);
   return add_fps(mult_fps(coeff1, load_avg), mult_fps(coeff2, convert_fp(list_size(&ready_list))));
 }
+
+/*funtion to add stuff to queue threads returns void*/
+/*thread -> priority then checking if that priority exsists ? add it : make its add it +1 length*/
+
+
+//function to find queue of priority x 
