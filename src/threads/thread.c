@@ -308,7 +308,7 @@ thread_exit (void)
      and schedule another process.  That process will destroy us
      when it calls thread_schedule_tail(). */
   intr_disable ();
-  list_remove (&thread_current()->allelem);
+  list_remove (&thread_current ()->allelem);
   thread_current ()->status = THREAD_DYING;
   schedule ();
   NOT_REACHED ();
@@ -355,17 +355,17 @@ is_thread_lower_priority (const struct list_elem *a,
                           const struct list_elem *b,
                           void *aux UNUSED)
 {
-  struct thread *t1 = list_entry(a, struct thread, elem);
-  int effective_priority1 = get_effective_priority(t1);
-  struct thread *t2 = list_entry(b, struct thread, elem);
-  int effective_priority2 = get_effective_priority(t2);
+  struct thread *t1 = list_entry (a, struct thread, elem);
+  int effective_priority1 = get_effective_priority (t1);
+  struct thread *t2 = list_entry (b, struct thread, elem);
+  int effective_priority2 = get_effective_priority (t2);
   return effective_priority1 < effective_priority2;
 }
 
 
 /* Returns the effective priority of a thread, the max of its actual and donated priority */
 int
-get_effective_priority(struct thread *t)
+get_effective_priority (struct thread *t)
 {
   int effective_priority = t->priority;
   if (t->donated_priority > effective_priority) {
@@ -393,14 +393,14 @@ thread_set_priority (int new_priority)
   }
   thread_current ()->donated_priority = max_priority_from_locks;
 
-  thread_yield();
+  thread_yield ();
 }
 
 /* Returns the current thread's priority. */
 int
 thread_get_priority (void) 
 {
-  return (get_effective_priority (thread_current ()));
+  return get_effective_priority (thread_current ());
 }
 
 /* Sets the current thread's nice value to NICE. */
@@ -522,7 +522,7 @@ init_thread (struct thread *t, const char *name, int priority)
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
   t->donated_priority = PRI_MIN;
-  list_init(&t->held_locks);
+  list_init (&t->held_locks);
   t->needed_lock = NULL;
   t->magic = THREAD_MAGIC;
 
@@ -555,11 +555,10 @@ next_thread_to_run (void)
   if (list_empty (&ready_list))
     return idle_thread;
   else {
-    struct list_elem* max_thread = list_max(&ready_list, is_thread_lower_priority, NULL);
-    list_remove(max_thread);
-    return list_entry(max_thread, struct thread, elem);
+    struct list_elem* highest_priority_thread = list_max (&ready_list, is_thread_lower_priority, NULL);
+    list_remove (highest_priority_thread);
+    return list_entry (highest_priority_thread, struct thread, elem);
   }
-    //return list_entry (list_pop_back (&ready_list), struct thread, elem);
 }
 
 /* Completes a thread switch by activating the new thread's page
