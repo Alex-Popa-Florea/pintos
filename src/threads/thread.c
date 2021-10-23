@@ -4,6 +4,7 @@
 #include <random.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdbool.h>
 #include "threads/fixed-point.h"
 #include "threads/flags.h"
 #include "threads/interrupt.h"
@@ -31,7 +32,7 @@ static struct list ready_list;
    when they are first scheduled and removed when they exit. */
 static struct list all_list;
 
-/*List of queue with the respective priority*/
+/*List of queues with the respective priority*/
 static struct list multqueue;
 
 /* Idle thread. */
@@ -59,6 +60,7 @@ static long long user_ticks;    /* # of timer ticks in user programs. */
 /* Scheduling. */
 #define TIME_SLICE 4            /* # of timer ticks to give each thread. */
 static unsigned thread_ticks;   /* # of timer ticks since last yield. */
+static bool update_thread_cpu = false;  /* Tracks changes in thread's recent_cpu field*/ 
 
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
@@ -170,14 +172,18 @@ thread_tick (void)
     kernel_ticks++;
     t->recent_cpu = add_fps_int(t->recent_cpu,1);
   }
-  if (timer_ticks () % TIME_SLICE == 0) {
-    t->priority = calculate_priority(t);
-  }
   if(timer_ticks () % TIMER_FREQ == 0) {
     load_avg = calculate_load_avg();
     t->recent_cpu = calculate_recent_cpu(t);
+    update_thread_cpu = true;
+  } else {
+    update_thread_cpu = false;
   }
     
+  if ((timer_ticks () % TIME_SLICE == 0) && update_thread_cpu) {
+    t->priority = calculate_priority(t);
+  }
+  
   /* Enforce preemption. */
   if (++thread_ticks >= TIME_SLICE)
     intr_yield_on_return ();
