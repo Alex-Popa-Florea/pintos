@@ -7,7 +7,7 @@ the following p.q fixed-point format: */
 #define FIXED_P (17)
 #define FIXED_Q (14)
 /* Define f = 2 ^ q as the following macro: */
-#define FIXED_F (1 << FIXED_Q) 
+#define FIXED_F (1 << FIXED_Q)
 
 /* Structure to represent fixed-point integers */
 typedef struct {

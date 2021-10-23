@@ -7,6 +7,7 @@
 /* Converts an integer to fixed-point */
 inline  fp_int convert_fp(int32_t n)
 {
+    ASSERT((n >= INT32_MIN) && (n <= INT32_MAX));
     return (fp_int){n * FIXED_F};
 }
 
@@ -31,6 +32,7 @@ inline  fp_int add_fps(fp_int x, fp_int y)
 /* Adds two fixed-point numbers */
 inline  fp_int add_fps_int(fp_int x, int32_t n)
 {
+    ASSERT((n >= INT32_MIN) && (n <= INT32_MAX));
     return (fp_int){ x.val + n*FIXED_F};
 }
 
@@ -43,6 +45,7 @@ inline fp_int sub_fps(fp_int x, fp_int y)
 /* Subtract integer from fixed-point number */
 inline fp_int sub_fps_int(fp_int x, int32_t n)
 {
+    ASSERT((n >= INT32_MIN) && (n <= INT32_MAX));
     return (fp_int){x.val - n*FIXED_F};
 }
 
@@ -55,6 +58,7 @@ inline fp_int mult_fps(fp_int x, fp_int y)
 /* Multiply fixed-point and int */
 inline fp_int mult_fps_int(fp_int x, int32_t n)
 {
+    ASSERT((n >= INT32_MIN) && (n <= INT32_MAX));
     return (fp_int){x.val * n};
 }
 
@@ -67,5 +71,6 @@ inline fp_int div_fps(fp_int x, fp_int y)
 /* Divide fixed-point number by an int */
 inline fp_int div_fps_int(fp_int x, int32_t n)
 {
+    ASSERT((n >= INT32_MIN) && (n <= INT32_MAX));
     return (fp_int){x.val/n};
 }

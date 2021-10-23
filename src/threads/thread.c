@@ -83,10 +83,14 @@ void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
 
 /* Helper functions for BSD scheduler */
-
 static int calculate_priority(struct thread *);
 static fp_int calculate_recent_cpu(struct thread *);
 static fp_int calculate_load_avg(void);
+
+static void add_to_mlfq(struct list *, struct list_elem *);
+static void remove_from_mlfq(struct list *, struct list_elem *);
+static int get_highest_priority_mlfq(struct list *);
+static struct list_elem *get_highest_thread_mlfq(struct list *);
 
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
@@ -183,7 +187,7 @@ thread_tick (void)
   if ((timer_ticks () % TIME_SLICE == 0) && update_thread_cpu) {
     t->priority = calculate_priority(t);
   }
-  
+
   /* Enforce preemption. */
   if (++thread_ticks >= TIME_SLICE)
     intr_yield_on_return ();
@@ -678,8 +682,25 @@ static fp_int calculate_load_avg()
   return add_fps(mult_fps(coeff1, load_avg), mult_fps(coeff2, convert_fp(list_size(&ready_list))));
 }
 
-/*funtion to add stuff to queue threads returns void*/
+/* Adds a new thread to the right queue in multi-level feedback queue */
 /*thread -> priority then checking if that priority exsists ? add it : make its add it +1 length*/
+static void add_to_mlfq(struct list *queues, struct list_elem *elem) {
 
+}
+
+/* Removes a thread from multi-level feedback queue */
+static void remove_from_mlfq(struct list *queues, struct list_elem *elem) {
+
+}
+
+/* Returns the priority of highest level in multi-level feedback queue */
+static int get_highest_priority_mlfq(struct list *queues) {
+  return 0;
+}
+
+/* Returns thread with highest priority in multi-level feedback queue */
+static struct list_elem *get_highest_thread_mlfq(struct list *queues) {
+
+}
 
 //function to find queue of priority x 
