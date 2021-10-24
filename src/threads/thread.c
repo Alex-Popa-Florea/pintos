@@ -380,8 +380,7 @@ thread_set_priority (int new_priority)
 {
   thread_current ()->priority = new_priority;
   
-  int max_priority_from_locks = new_priority;
-
+  int max_priority_from_locks = PRI_MIN;
   // Loop through all the locks held by the thread to see if it should now be donated priority
   struct list_elem *current_lock_elem = list_begin (&thread_current ()->held_locks);
   while (current_lock_elem != list_tail (&thread_current ()->held_locks)) {
