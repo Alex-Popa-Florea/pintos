@@ -107,14 +107,6 @@ struct thread
     unsigned magic;                     /* Detects stack overflow. */
   };
 
-/* Stores a Priority Queue of threads for Multi-level Feedback Queue  */
-typedef struct{
-   int priority;                 /* Priority of threads stored in queue */
-   int size;                     /* Size of queue in struct */        /*saves time O(n), n = num of prios saves recaluclation of queue lenghts*/
-   struct list *queue;            /* Queuestoring threads of same priority */
-   struct list_elem elem;        /* List elem for multqueue */
-} mlfq_elem;
-
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
    Controlled by kernel command-line option "mlfqs". */

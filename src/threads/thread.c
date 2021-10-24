@@ -6,6 +6,7 @@
 #include <string.h>
 #include <stdbool.h>
 #include "threads/fixed-point.h"
+#include "threads/mlfq.h"
 #include "threads/flags.h"
 #include "threads/interrupt.h"
 #include "threads/intr-stubs.h"
@@ -33,7 +34,7 @@ static struct list ready_list;
 static struct list all_list;
 
 /*List of queues with the respective priority*/
-static struct list mult_queue;
+static mlfq mult_queue;
 
 /* Idle thread. */
 static struct thread *idle_thread;
@@ -86,12 +87,6 @@ static tid_t allocate_tid (void);
 static int calculate_priority(struct thread *);
 static fp_int calculate_recent_cpu(struct thread *);
 static fp_int calculate_load_avg(void);
-
-static void add_to_mlfq(struct list_elem *);
-static void remove_from_mlfq(struct list_elem *);
-static int get_highest_priority_mlfq(void);
-static struct list_elem *get_highest_thread_mlfq(void);
-static mlfq_elem *find_elem_of_priority(int);
 
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
@@ -301,7 +296,7 @@ thread_unblock (struct thread *t)
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
   if (thread_mlfqs) {
-    add_to_mlfq(&(t->elem));
+    add_to_mlfq(&mult_queue, &(t->elem));
   } else {
     list_insert_ordered(&ready_list, &t->elem,is_thread_lower_priority,NULL);
   }
@@ -358,7 +353,7 @@ thread_exit (void)
      when it calls thread_schedule_tail(). */
   intr_disable ();
   if (thread_mlfqs) {
-    remove_from_mlfq(&thread_current()->elem);
+    remove_from_mlfq(&mult_queue, &thread_current()->elem);
   } else {
     list_remove (&thread_current()->allelem);
   }
@@ -380,7 +375,7 @@ thread_yield (void)
   old_level = intr_disable ();
   if (cur != idle_thread) {
     if (thread_mlfqs) {
-      add_to_mlfq(&cur->elem);
+      add_to_mlfq(&mult_queue, &cur->elem);
     } else {
       list_push_back (&ready_list, &cur->elem);
     }
@@ -428,7 +423,7 @@ thread_set_nice (int nice)
   struct thread* cur = thread_current();
   cur->nice = nice;
   cur->priority = calculate_priority(cur);
-  if (cur->priority > get_highest_priority_mlfq()) { // Have I got the logic right here?
+  if (cur->priority > get_highest_priority_mlfq(&mult_queue)) { // Have I got the logic right here?
     thread_yield();
   }
 }
@@ -574,7 +569,7 @@ next_thread_to_run (void)
     return idle_thread; 
   } else {
     if (thread_mlfqs) {
-      return list_entry (get_highest_thread_mlfq(), struct thread, elem);
+      return list_entry (get_highest_thread_mlfq(&mult_queue), struct thread, elem);
     } else {
       return list_entry (list_pop_back (&ready_list), struct thread, elem);
     }
@@ -700,59 +695,3 @@ static fp_int calculate_load_avg()
   fp_int coeff2 = div_fps_int(convert_fp(1), 60);
   return add_fps(mult_fps(coeff1, load_avg), mult_fps(coeff2, convert_fp(list_size(&ready_list))));
 }
-
-/* Adds a new thread to the right queue in multi-level feedback queue */
-/*thread -> priority then checking if that priority exsists ? add it : make its add it +1 length*/
-static void add_to_mlfq(struct list_elem *thread_elem) {
-  struct thread *thread = list_entry(thread_elem,struct thread,elem);
-  mlfq_elem *queue_elem = find_elem_of_priority(thread->priority);
-  if(queue_elem == NULL){
-    mlfq_elem e;
-    struct list thread_queue;
-    e.priority = thread->priority;
-    e.size = 1;
-    list_init(&thread_queue);
-    e.queue = &thread_queue;
-    list_push_back(e.queue,thread_elem);
-  }
-  else{
-    list_push_back(queue_elem->queue,thread_elem);
-    queue_elem->size+=1;
-  }
-}
-
-/* Removes a thread from multi-level feedback queue */
-static void remove_from_mlfq(struct list_elem *thread_elem) {
-  list_remove(thread_elem);
-}
-
-static bool compare_priority(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED){
-  mlfq_elem *A = list_entry(a,mlfq_elem,elem);
-  mlfq_elem *B = list_entry(b,mlfq_elem,elem);
-
-  return A->priority < B->priority;
-}
-
-/* Returns the priority of highest level in multi-level feedback queue */
-static int get_highest_priority_mlfq() {
-  return list_entry(list_max(&mult_queue,&compare_priority,NULL),mlfq_elem,elem)->priority;
-}
-
-/* Returns thread with highest priority in multi-level feedback queue */
-static struct list_elem *get_highest_thread_mlfq() {
-  mlfq_elem *elem = find_elem_of_priority(get_highest_priority_mlfq ());
-  //TODO round robin? - Remember we need this to return the thread, not mlfq_elem
-}
-
-//function to find queue of priority x
-static mlfq_elem *find_elem_of_priority(int priority){
-  struct list_elem *e;
-  for (e = list_begin (&mult_queue); e != list_end (&mult_queue); e = list_next (e)){
-    mlfq_elem *queue_elem = list_entry(e,mlfq_elem,elem);
-    if(queue_elem->priority == priority){
-      return queue_elem;
-    }
-  }
-  return NULL;
-} 
-/*is returning NULL the best idea?*/
