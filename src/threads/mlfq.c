@@ -28,11 +28,9 @@ void add_to_mlfq(mlfq *mult_queue, struct list_elem *thread_elem) {
   }
 }
 
-/* Removes a thread from multi-level feedback queue */
+/* Removes a thread from its level in multi-level feedback queue */
 void remove_from_mlfq(mlfq *mult_queue, struct list_elem *thread_elem) {
   list_remove(thread_elem);
-
-  //not convinced this removes a thread from a queue in mult_queue?
 }
 
 
@@ -59,7 +57,7 @@ struct list_elem *get_highest_thread_mlfq(mlfq *mult_queue) {
 mlfq_elem *find_elem_of_priority(mlfq *mult_queue, int priority){
   struct list_elem *e;
   for (e = list_begin (mult_queue); e != list_end (mult_queue); e = list_next (e)){
-    mlfq_elem *queue_elem = list_entry(e, mlfq_elem,elem);
+    mlfq_elem *queue_elem = list_entry(e,mlfq_elem,elem);
     if(queue_elem->priority == priority){
       return queue_elem;
     }
