@@ -111,7 +111,7 @@ struct thread
 typedef struct{
    int priority;                 /* Priority of threads stored in queue */
    int size;                     /* Size of queue in struct */        /*saves time O(n), n = num of prios saves recaluclation of queue lenghts*/
-   struct list queue;            /* Queuestoring threads of same priority */
+   struct list *queue;            /* Queuestoring threads of same priority */
    struct list_elem elem;        /* List elem for multqueue */
 } mlfq_elem;
 

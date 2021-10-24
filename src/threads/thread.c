@@ -33,7 +33,7 @@ static struct list ready_list;
 static struct list all_list;
 
 /*List of queues with the respective priority*/
-static struct list multqueue;
+static struct list mult_queue;
 
 /* Idle thread. */
 static struct thread *idle_thread;
@@ -87,10 +87,11 @@ static int calculate_priority(struct thread *);
 static fp_int calculate_recent_cpu(struct thread *);
 static fp_int calculate_load_avg(void);
 
-static void add_to_mlfq(struct list *, struct list_elem *);
-static void remove_from_mlfq(struct list *, struct list_elem *);
-static int get_highest_priority_mlfq(struct list *);
-static struct list_elem *get_highest_thread_mlfq(struct list *);
+static void add_to_mlfq(struct list_elem *);
+static void remove_from_mlfq(struct list_elem *);
+static int get_highest_priority_mlfq(void);
+static struct list_elem *get_highest_thread_mlfq(void);
+static mlfq_elem *find_elem_of_priority(int);
 
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
@@ -113,7 +114,7 @@ thread_init (void)
   lock_init (&tid_lock);
   list_init (&ready_list);
   list_init (&all_list);
-  list_init (&multqueue);
+  list_init (&mult_queue);
 
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
@@ -684,23 +685,56 @@ static fp_int calculate_load_avg()
 
 /* Adds a new thread to the right queue in multi-level feedback queue */
 /*thread -> priority then checking if that priority exsists ? add it : make its add it +1 length*/
-static void add_to_mlfq(struct list *queues, struct list_elem *elem) {
-
+static void add_to_mlfq(struct list_elem *thread_elem) {
+  struct thread *thread = list_entry(thread_elem,struct thread,elem);
+  mlfq_elem *queue_elem = find_elem_of_priority(thread->priority);
+  if(queue_elem == NULL){
+    mlfq_elem e;
+    struct list thread_queue;
+    e.priority = thread->priority;
+    e.size = 1;
+    list_init(&thread_queue);
+    e.queue = &thread_queue;
+    list_push_back(e.queue,thread_elem);
+  }
+  else{
+    list_push_back(queue_elem->queue,thread_elem);
+    queue_elem->size+=1;
+  }
 }
 
 /* Removes a thread from multi-level feedback queue */
-static void remove_from_mlfq(struct list *queues, struct list_elem *elem) {
+static void remove_from_mlfq(struct list_elem *thread_elem) {
+  list_remove(thread_elem);
+}
 
+static bool compare_priority(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED){
+  mlfq_elem *A = list_entry(a,mlfq_elem,elem);
+  mlfq_elem *B = list_entry(b,mlfq_elem,elem);
+
+  return A->priority < B->priority;
 }
 
 /* Returns the priority of highest level in multi-level feedback queue */
-static int get_highest_priority_mlfq(struct list *queues) {
-  return 0;
+static int get_highest_priority_mlfq() {
+  return list_entry(list_max(&mult_queue,&compare_priority,NULL),mlfq_elem,elem)->priority;
 }
 
 /* Returns thread with highest priority in multi-level feedback queue */
-static struct list_elem *get_highest_thread_mlfq(struct list *queues) {
-
+static struct list_elem *get_highest_thread_mlfq() {
+  mlfq_elem *elem = find_elem_of_priority(get_highest_priority_mlfq ());
+  //TODO round robin?
 }
 
-//function to find queue of priority x 
+//function to find queue of priority x
+static mlfq_elem *find_elem_of_priority(int priority){
+  struct list_elem *e;
+  for (e = list_begin (&mult_queue); e != list_end (&mult_queue); e = list_next (e)){
+    mlfq_elem *queue_elem = list_entry(e,mlfq_elem,elem);
+    if(queue_elem->priority == priority){
+      return queue_elem;
+    }
+  }
+  return NULL;
+} 
+/*is returning NULL the best idea?*/
