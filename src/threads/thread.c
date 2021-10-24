@@ -300,7 +300,11 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  list_insert_ordered(&ready_list, &t->elem,is_thread_lower_priority,NULL);  //add to multqueue given priority
+  if (thread_mlfqs) {
+    add_to_mlfq(&(t->elem));
+  } else {
+    list_insert_ordered(&ready_list, &t->elem,is_thread_lower_priority,NULL);
+  }
   t->status = THREAD_READY;
   intr_set_level (old_level);
 }
@@ -353,8 +357,12 @@ thread_exit (void)
      and schedule another process.  That process will destroy us
      when it calls thread_schedule_tail(). */
   intr_disable ();
-  list_remove (&thread_current()->allelem);
-  thread_current ()->status = THREAD_DYING;  //multqueue remove thread from respective queue
+  if (thread_mlfqs) {
+    remove_from_mlfq(&thread_current()->elem);
+  } else {
+    list_remove (&thread_current()->allelem);
+  }
+  thread_current ()->status = THREAD_DYING;  
   schedule ();
   NOT_REACHED ();
 }
@@ -370,8 +378,13 @@ thread_yield (void)
   ASSERT (!intr_context ());
 
   old_level = intr_disable ();
-  if (cur != idle_thread) 
-    list_push_back (&ready_list, &cur->elem); //add to multqueue given priority
+  if (cur != idle_thread) {
+    if (thread_mlfqs) {
+      add_to_mlfq(&cur->elem);
+    } else {
+      list_push_back (&ready_list, &cur->elem);
+    }
+  }
   cur->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
@@ -415,7 +428,7 @@ thread_set_nice (int nice)
   struct thread* cur = thread_current();
   cur->nice = nice;
   cur->priority = calculate_priority(cur);
-  if (list_entry(list_tail(&ready_list),struct thread,elem)->priority > cur->priority){ //check multqueue not readylist
+  if (cur->priority > get_highest_priority_mlfq()) { // Have I got the logic right here?
     thread_yield();
   }
 }
@@ -557,10 +570,15 @@ alloc_frame (struct thread *t, size_t size)
 static struct thread *
 next_thread_to_run (void) 
 {
-  if (list_empty (&ready_list))
+  if (list_empty (&ready_list)) {
     return idle_thread; 
-  else
-    return list_entry (list_pop_back (&ready_list), struct thread, elem);  //replace ready_list wiht multqueue
+  } else {
+    if (thread_mlfqs) {
+      return list_entry (get_highest_thread_mlfq(), struct thread, elem);
+    } else {
+      return list_entry (list_pop_back (&ready_list), struct thread, elem);
+    }
+  }
 }
 
 /* Completes a thread switch by activating the new thread's page
@@ -723,7 +741,7 @@ static int get_highest_priority_mlfq() {
 /* Returns thread with highest priority in multi-level feedback queue */
 static struct list_elem *get_highest_thread_mlfq() {
   mlfq_elem *elem = find_elem_of_priority(get_highest_priority_mlfq ());
-  //TODO round robin?
+  //TODO round robin? - Remember we need this to return the thread, not mlfq_elem
 }
 
 //function to find queue of priority x
