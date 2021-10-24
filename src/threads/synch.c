@@ -189,7 +189,7 @@ lock_init (struct lock *lock)
 
 
 /* Compute the donated priority in the chain caused by a thread trying to acquire a lock */
-void
+static void
 compute_priorities (struct thread *thread) {
   // If the thread needs a lock, recursively proceed down the lock chain
   if (thread->needed_lock) {
@@ -208,7 +208,8 @@ compute_priorities (struct thread *thread) {
   }
 }
 
-int get_max_priority_of_waiters(struct lock *lock) {
+static int 
+get_max_priority_of_waiters (struct lock *lock) {
   int max_priority = PRI_MIN;
   struct list_elem *current_thread_elem = list_begin (&lock->semaphore.waiters);
   while (current_thread_elem != list_tail (&lock->semaphore.waiters)) {
@@ -321,18 +322,21 @@ struct semaphore_elem
   struct semaphore semaphore;         /* This semaphore. */
 };
 
-bool is_semaphore_lower_priority (const struct list_elem *a,
-                                  const struct list_elem *b,
-                                  void *aux UNUSED)
+bool 
+is_semaphore_lower_priority (const struct list_elem *a,
+                             const struct list_elem *b,
+                             void *aux UNUSED)
 {
   struct semaphore s1 = list_entry (a, struct semaphore_elem, elem)->semaphore;
-  struct list_elem *elem1 = list_head(&s1.waiters);
+  struct list_elem *elem1 = list_begin (&s1.waiters);
   struct thread *thread1 = list_entry (elem1, struct thread, elem);
-  int effective_priority1 = get_effective_priority(thread1);
+  int effective_priority1 = get_effective_priority (thread1);
+
   struct semaphore s2 = list_entry (b, struct semaphore_elem, elem)->semaphore;
-  struct list_elem *elem2 = list_head(&s2.waiters);
+  struct list_elem *elem2 = list_begin (&s2.waiters);
   struct thread *thread2 = list_entry (elem2, struct thread, elem);
-  int effective_priority2 = get_effective_priority(thread2);
+  int effective_priority2 = get_effective_priority (thread2);
+
   return effective_priority1 < effective_priority2;
 }
 
@@ -401,8 +405,8 @@ cond_signal (struct condition *cond, struct lock *lock UNUSED)
   ASSERT (lock_held_by_current_thread (lock));
 
   if (!list_empty (&cond->waiters)) {
-    struct semaphore highest_priority_semaphore = list_entry (list_remove (list_max (&cond->waiters, is_semaphore_lower_priority, NULL)), struct semaphore_elem, elem)->semaphore;
-    sema_up (&highest_priority_semaphore);
+    list_sort (&cond->waiters, is_semaphore_lower_priority, NULL);
+    sema_up (&list_entry (list_pop_back (&cond->waiters), struct semaphore_elem, elem)->semaphore);
   }
 }
 
