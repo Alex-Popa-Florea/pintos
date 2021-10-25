@@ -118,6 +118,10 @@ thread_init (void)
   initial_thread->tid = allocate_tid ();
   initial_thread->recent_cpu = (fp_int){0};
   initial_thread->nice = 0;
+
+  if (thread_mlfqs) {
+    add_to_mlfq(&mult_queue, &initial_thread->elem);
+  }
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.
@@ -348,9 +352,8 @@ thread_exit (void)
   intr_disable ();
   if (thread_mlfqs) {
     remove_from_mlfq (&thread_current ()->elem);
-  } else {
-    list_remove (&thread_current ()->allelem);
   }
+  list_remove (&thread_current ()->allelem);
   thread_current ()->status = THREAD_DYING;  
   schedule ();
   NOT_REACHED ();

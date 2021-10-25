@@ -50,7 +50,7 @@ static bool compare_priority_mlfq(const struct list_elem *a, const struct list_e
 /* Returns thread with highest priority in multi-level feedback queue */
 struct list_elem *get_highest_thread_mlfq(mlfq *mult_queue) {
   mlfq_elem *elem = find_elem_of_priority(mult_queue, get_highest_priority_mlfq (mult_queue));
-  //TODO round robin? - Remember we need this to return the thread, not mlfq_elem
+  return list_max(elem->queue, compare_priority_mlfq, NULL);
 }
 
 /* Finds level of priority 'priority' in multi-level feedback queue */
