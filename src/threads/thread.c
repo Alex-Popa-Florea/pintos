@@ -350,9 +350,9 @@ thread_exit (void)
      and schedule another process.  That process will destroy us
      when it calls thread_schedule_tail(). */
   intr_disable ();
-  if (thread_mlfqs) {
-    remove_from_mlfq (&thread_current ()->elem);
-  }
+  // if (thread_mlfqs) {
+  //   remove_from_mlfq (&thread_current ()->ml_elem);
+  // }
   list_remove (&thread_current ()->allelem);
   thread_current ()->status = THREAD_DYING;  
   schedule ();
@@ -596,10 +596,12 @@ alloc_frame (struct thread *t, size_t size)
 static struct thread *
 next_thread_to_run (void) 
 {
+  // take thread_mmlfqs out
   if (list_empty (&ready_list)) {
     return idle_thread; 
   } else if (thread_mlfqs) {
-    return list_entry (get_highest_thread_mlfq(&mult_queue), struct thread, elem);
+    //need to remove it from the list at this point
+    return list_entry (get_highest_thread_mlfq(&mult_queue), struct thread, ml_elem);
   } else {
     struct list_elem* highest_priority_thread = list_max (&ready_list, is_thread_lower_priority, NULL);
     list_remove (highest_priority_thread);
@@ -696,6 +698,7 @@ uint32_t thread_stack_ofs = offsetof (struct thread, stack);
 
 /* Calculates priority of thread based on niceness and CPU usage */
 static int calculate_priority(struct thread *t) 
+//it could change levels in the mlfq
 {
   int priority = PRI_MAX - convert_int_nearest(div_fps_int(t->recent_cpu, 4)) - (t->nice * 2);
   if (priority < PRI_MIN) {

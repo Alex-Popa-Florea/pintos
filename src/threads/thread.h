@@ -98,8 +98,9 @@ struct thread
     struct list_elem allelem;           /* List element for all threads list. */
     
     /* Members used for BSD Scheduler */
-    int nice;                       /* How nice thread should be to other threads */
+    int nice;                           /* How nice thread should be to other threads */
     fp_int recent_cpu;                  /* Estimation of CPU time used */
+    struct list_elem ml_elem;           /* List element for multi-level queue */
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
