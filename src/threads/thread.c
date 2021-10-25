@@ -119,9 +119,14 @@ thread_init (void)
   initial_thread->recent_cpu = (fp_int){0};
   initial_thread->nice = 0;
 
+  enum intr_level old_level;
+  old_level = intr_disable ();
+
   if (thread_mlfqs) {
     add_to_mlfq(&mult_queue, &initial_thread->elem);
   }
+
+  intr_set_level (old_level);
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.
@@ -600,7 +605,7 @@ next_thread_to_run (void)
 {
   if (thread_mlfqs) {
     struct list_elem* highest_priority_thread = get_highest_thread_mlfq(&mult_queue);
-    list_remove (highest_priority_thread);
+    remove_from_mlfq (&mult_queue, highest_priority_thread);
     return list_entry (highest_priority_thread, struct thread, ml_elem);
   } else {
     if (list_empty (&ready_list)) {

@@ -19,7 +19,7 @@ typedef struct {
 } mlfq_elem;
 
 void add_to_mlfq (mlfq *, struct list_elem *);
-void remove_from_mlfq (struct list_elem *);
+void remove_from_mlfq (mlfq *, struct list_elem *);
 int get_highest_priority_mlfq (mlfq *);
 struct list_elem *get_highest_thread_mlfq (mlfq *);
 mlfq_elem *find_elem_of_priority (mlfq *, int);

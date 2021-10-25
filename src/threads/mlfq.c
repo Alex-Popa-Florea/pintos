@@ -30,8 +30,11 @@ void add_to_mlfq(mlfq *mult_queue, struct list_elem *thread_elem) {
 }
 
 /* Removes a thread from its level in multi-level feedback queue */
-void remove_from_mlfq (struct list_elem *thread_elem) {
+void remove_from_mlfq (mlfq *mult_queue, struct list_elem *thread_elem) {
+  struct thread *t = list_entry(thread_elem, struct thread, ml_elem);
+  mlfq_elem *level = find_elem_of_priority(mult_queue, t->priority);
   list_remove(thread_elem);
+  level->size--;
 }
 
 
