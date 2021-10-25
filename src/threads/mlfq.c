@@ -49,18 +49,17 @@ static bool compare_priority_mlfq(const struct list_elem *a, const struct list_e
 }
 
 /* Compares priority of two threads */
-static bool compare_thread_priority(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED){
+static bool compare_thread_recent_cpu(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED){
   struct thread *A = list_entry(a, struct thread, ml_elem);
   struct thread *B = list_entry(b, struct thread, ml_elem);
 
-  return A->priority < B->priority;
+  return convert_int_nearest(A->recent_cpu) < convert_int_nearest(B->recent_cpu);
 }
 
 /* Returns thread with highest priority in multi-level feedback queue */
 struct list_elem *get_highest_thread_mlfq(mlfq *mult_queue) {
   mlfq_elem *elem = list_entry(list_max(mult_queue, compare_priority_mlfq, NULL), mlfq_elem, elem);
-  // mlfq_elem *elem = find_elem_of_priority(mult_queue, get_highest_priority_mlfq (mult_queue));
-  return list_max(elem->queue, compare_thread_priority, NULL);
+  return list_max(elem->queue, compare_thread_recent_cpu, NULL);
 }
 
 /* Finds level of priority 'priority' in multi-level feedback queue */

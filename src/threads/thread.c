@@ -211,7 +211,6 @@ tid_t
 thread_create (const char *name, int priority,
                thread_func *function, void *aux) 
 {
-  //printf("at creation:%d", priority);
   struct thread *t;
   struct kernel_thread_frame *kf;
   struct switch_entry_frame *ef;
@@ -350,9 +349,6 @@ thread_exit (void)
      and schedule another process.  That process will destroy us
      when it calls thread_schedule_tail(). */
   intr_disable ();
-  // if (thread_mlfqs) {
-  //   remove_from_mlfq (&thread_current ()->ml_elem);
-  // }
   list_remove (&thread_current ()->allelem);
   thread_current ()->status = THREAD_DYING;  
   schedule ();
@@ -428,6 +424,7 @@ get_effective_priority (struct thread *t)
 void
 thread_set_priority (int new_priority) 
 {
+  ASSERT(!thread_mlfqs);
   thread_current ()->priority = new_priority;
   thread_yield ();
 }
@@ -436,6 +433,9 @@ thread_set_priority (int new_priority)
 int
 thread_get_priority (void) 
 {
+  if (thread_mlfqs) {
+    return thread_current ()->priority;
+  }
   return get_effective_priority (thread_current ());
 }
 
@@ -561,14 +561,16 @@ init_thread (struct thread *t, const char *name, int priority)
 
   if (thread_mlfqs) {
     t->priority = calculate_priority (t);
-    t->recent_cpu = thread_current()->recent_cpu;
-    t->nice = thread_current()->nice;
+    if (t != initial_thread) {
+      t->recent_cpu = thread_current ()->recent_cpu;
+      t->nice = thread_current ()->nice;
+    }
   } else {
     t->priority = priority;
-    t->donated_priority = PRI_MIN;
-    list_init (&t->held_locks);
-    t->needed_lock = NULL;
-  }
+  } 
+  t->donated_priority = PRI_MIN;
+  list_init (&t->held_locks);
+  t->needed_lock = NULL;
 
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
@@ -596,16 +598,18 @@ alloc_frame (struct thread *t, size_t size)
 static struct thread *
 next_thread_to_run (void) 
 {
-  // take thread_mmlfqs out
-  if (list_empty (&ready_list)) {
-    return idle_thread; 
-  } else if (thread_mlfqs) {
-    //need to remove it from the list at this point
-    return list_entry (get_highest_thread_mlfq(&mult_queue), struct thread, ml_elem);
-  } else {
-    struct list_elem* highest_priority_thread = list_max (&ready_list, is_thread_lower_priority, NULL);
+  if (thread_mlfqs) {
+    struct list_elem* highest_priority_thread = get_highest_thread_mlfq(&mult_queue);
     list_remove (highest_priority_thread);
-    return list_entry (highest_priority_thread, struct thread, elem);
+    return list_entry (highest_priority_thread, struct thread, ml_elem);
+  } else {
+    if (list_empty (&ready_list)) {
+      return idle_thread; 
+    } else {
+      struct list_elem* highest_priority_thread = list_max (&ready_list, is_thread_lower_priority, NULL);
+      list_remove (highest_priority_thread);
+      return list_entry (highest_priority_thread, struct thread, elem);
+    }
   }
 }
 
@@ -698,8 +702,10 @@ uint32_t thread_stack_ofs = offsetof (struct thread, stack);
 
 /* Calculates priority of thread based on niceness and CPU usage */
 static int calculate_priority(struct thread *t) 
-//it could change levels in the mlfq
 {
+  if (initial_thread) {
+    return PRI_DEFAULT;
+  }
   int priority = PRI_MAX - convert_int_nearest(div_fps_int(t->recent_cpu, 4)) - (t->nice * 2);
   if (priority < PRI_MIN) {
     return PRI_MIN;
@@ -727,5 +733,5 @@ static fp_int calculate_load_avg()
 {
   fp_int coeff1 = div_fps_int(convert_fp(59), 60);
   fp_int coeff2 = div_fps_int(convert_fp(1), 60);
-  return add_fps(mult_fps(coeff1, load_avg), mult_fps(coeff2, convert_fp(list_size(&ready_list))));
+  return add_fps(mult_fps(coeff1, load_avg), mult_fps(coeff2, convert_fp(list_size(&all_list))));
 }
