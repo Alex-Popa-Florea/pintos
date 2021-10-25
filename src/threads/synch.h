@@ -16,12 +16,18 @@ void sema_down (struct semaphore *);
 bool sema_try_down (struct semaphore *);
 void sema_up (struct semaphore *);
 void sema_self_test (void);
+bool is_semaphore_lower_priority (const struct list_elem *a,
+                                  const struct list_elem *b,
+                                  void *aux);
 
 /* Lock. */
 struct lock 
   {
-    struct thread *holder;      /* Thread holding lock (for debugging). */
-    struct semaphore semaphore; /* Binary semaphore controlling access. */
+    struct thread *holder;                 /* Thread holding lock (for debugging). */
+    struct semaphore semaphore;            /* Binary semaphore controlling access. */
+
+    int max_donated_priority_of_waiters;   /* Stores the maximum priority of threads directly or indirectly waiting */
+    struct list_elem elem;                 /* Allows for list so threads can track the locks they hold */
   };
 
 void lock_init (struct lock *);

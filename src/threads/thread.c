@@ -102,15 +102,6 @@ thread_init (void)
 
 /* Starts preemptive thread scheduling by enabling interrupts.
    Also creates the idle thread. */
-bool
-is_thread_lower_priority (const struct list_elem *a,
-                       const struct list_elem *b,
-                       void *aux UNUSED)
-{
-  int priority1 = list_entry(a, struct thread, elem)->priority;
-  int priority2 = list_entry(b, struct thread, elem)->priority;
-  return priority1 < priority2;
-}
 void
 thread_start (void) 
 {
@@ -182,6 +173,7 @@ tid_t
 thread_create (const char *name, int priority,
                thread_func *function, void *aux) 
 {
+  //printf("at creation:%d", priority);
   struct thread *t;
   struct kernel_thread_frame *kf;
   struct switch_entry_frame *ef;
@@ -225,6 +217,8 @@ thread_create (const char *name, int priority,
   /* Add to run queue. */
   thread_unblock (t);
 
+  thread_yield ();
+
   return tid;
 }
 
@@ -261,7 +255,7 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  list_insert_ordered(&ready_list, &t->elem,is_thread_lower_priority,NULL);
+  list_push_back (&ready_list, &t->elem);
   t->status = THREAD_READY;
   intr_set_level (old_level);
 }
@@ -314,7 +308,7 @@ thread_exit (void)
      and schedule another process.  That process will destroy us
      when it calls thread_schedule_tail(). */
   intr_disable ();
-  list_remove (&thread_current()->allelem);
+  list_remove (&thread_current ()->allelem);
   thread_current ()->status = THREAD_DYING;
   schedule ();
   NOT_REACHED ();
@@ -355,18 +349,44 @@ thread_foreach (thread_action_func *func, void *aux)
     }
 }
 
+/* Comparison function of the effective priorities of threads */
+bool
+is_thread_lower_priority (const struct list_elem *a,
+                          const struct list_elem *b,
+                          void *aux UNUSED)
+{
+  struct thread *t1 = list_entry (a, struct thread, elem);
+  int effective_priority1 = get_effective_priority (t1);
+  struct thread *t2 = list_entry (b, struct thread, elem);
+  int effective_priority2 = get_effective_priority (t2);
+  return effective_priority1 < effective_priority2;
+}
+
+
+/* Returns the effective priority of a thread, the max of its actual and donated priority */
+int
+get_effective_priority (struct thread *t)
+{
+  int effective_priority = t->priority;
+  if (t->donated_priority > effective_priority) {
+    effective_priority = t->donated_priority;
+  }
+  return effective_priority;
+}
+
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void
 thread_set_priority (int new_priority) 
 {
   thread_current ()->priority = new_priority;
+  thread_yield ();
 }
 
 /* Returns the current thread's priority. */
 int
 thread_get_priority (void) 
 {
-  return thread_current ()->priority;
+  return get_effective_priority (thread_current ());
 }
 
 /* Sets the current thread's nice value to NICE. */
@@ -475,6 +495,7 @@ is_thread (struct thread *t)
 static void
 init_thread (struct thread *t, const char *name, int priority)
 {
+  //printf("at init:%d", priority);
   enum intr_level old_level;
 
   ASSERT (t != NULL);
@@ -486,6 +507,9 @@ init_thread (struct thread *t, const char *name, int priority)
   strlcpy (t->name, name, sizeof t->name);
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
+  t->donated_priority = PRI_MIN;
+  list_init (&t->held_locks);
+  t->needed_lock = NULL;
   t->magic = THREAD_MAGIC;
 
   old_level = intr_disable ();
@@ -516,8 +540,11 @@ next_thread_to_run (void)
 {
   if (list_empty (&ready_list))
     return idle_thread;
-  else
-    return list_entry (list_pop_back (&ready_list), struct thread, elem);
+  else {
+    struct list_elem* highest_priority_thread = list_max (&ready_list, is_thread_lower_priority, NULL);
+    list_remove (highest_priority_thread);
+    return list_entry (highest_priority_thread, struct thread, elem);
+  }
 }
 
 /* Completes a thread switch by activating the new thread's page
