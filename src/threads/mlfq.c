@@ -5,7 +5,7 @@
 #include "userprog/process.h"
 #endif
 
-static bool compare_priority(
+static bool compare_priority_mlfq(
     const struct list_elem *, const struct list_elem *, void * UNUSED
 );
 
@@ -36,11 +36,11 @@ void remove_from_mlfq (struct list_elem *thread_elem) {
 
 /* Returns the priority of highest level in multi-level feedback queue */
 int get_highest_priority_mlfq(mlfq *mult_queue) {
-  return list_entry(list_max(mult_queue, &compare_priority, NULL), mlfq_elem, elem)->priority;
+  return list_entry(list_max(mult_queue, compare_priority_mlfq, NULL), mlfq_elem, elem)->priority;
 }
 
 /* Compares two priority levels in multi-level feedback queue */
-static bool compare_priority(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED){
+static bool compare_priority_mlfq(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED){
   mlfq_elem *A = list_entry(a, mlfq_elem,elem);
   mlfq_elem *B = list_entry(b, mlfq_elem,elem);
 
