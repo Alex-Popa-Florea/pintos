@@ -3,7 +3,8 @@
 
 #include <debug.h>
 #include <list.h>
-#include <stdint.h>
+//#include <stdint.h>
+#include "threads/fixed-point.h"
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -95,6 +96,11 @@ struct thread
     struct lock *needed_lock;           /* Pointer to lock currently needed by the thread */
 
     struct list_elem allelem;           /* List element for all threads list. */
+    
+    /* Members used for BSD Scheduler */
+    int nice;                       /* How nice thread should be to other threads */
+    fp_int recent_cpu;                  /* Estimation of CPU time used */
+
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
 
