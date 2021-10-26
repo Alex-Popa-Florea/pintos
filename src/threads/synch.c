@@ -193,18 +193,19 @@ static void
 compute_priorities (struct thread *thread) {
   // If the thread needs a lock, recursively proceed down the lock chain
   if (thread->needed_lock) {
-    int effective_priority = get_effective_priority (thread);
-    
-    // Give the thread holding the lock the donated priority if it is higher
-    if (thread->needed_lock->holder->donated_priority < effective_priority) {
-      thread->needed_lock->holder->donated_priority = effective_priority;
-    }
+    if (thread->needed_lock->holder) {
+      int effective_priority = get_effective_priority (thread);
+      // Give the thread holding the lock the donated priority if it is higher
+      if (thread->needed_lock->holder->donated_priority < effective_priority) {
+        thread->needed_lock->holder->donated_priority = effective_priority;
+      }
 
-    // Make the lock store the priority of the waiting thread if it is higher
-    if (thread->needed_lock->max_donated_priority_of_waiters < effective_priority) {
-      thread->needed_lock->max_donated_priority_of_waiters = effective_priority;
+      // Make the lock store the priority of the waiting thread if it is higher
+      if (thread->needed_lock->max_donated_priority_of_waiters < effective_priority) {
+        thread->needed_lock->max_donated_priority_of_waiters = effective_priority;
+      }
+      compute_priorities (thread->needed_lock->holder);
     }
-    compute_priorities (thread->needed_lock->holder);
   }
 }
 
@@ -239,15 +240,13 @@ lock_acquire (struct lock *lock)
   ASSERT (lock != NULL);
   ASSERT (!intr_context ());
   ASSERT (!lock_held_by_current_thread (lock));
-
-  if(!lock_try_acquire (lock)){
-    thread_current ()->needed_lock = lock;
-    compute_priorities (thread_current ());
-    sema_down (&lock->semaphore);
-    lock->holder = thread_current ();
-    lock->max_donated_priority_of_waiters = get_max_priority_of_waiters (lock);
-    thread_current ()->needed_lock = NULL;
-  }
+  
+  thread_current ()->needed_lock = lock;
+  compute_priorities (thread_current ());
+  sema_down (&lock->semaphore);
+  lock->holder = thread_current ();
+  lock->max_donated_priority_of_waiters = get_max_priority_of_waiters (lock);
+  thread_current ()->needed_lock = NULL;
 
   list_push_back (&thread_current ()->held_locks, &lock->elem);
 }

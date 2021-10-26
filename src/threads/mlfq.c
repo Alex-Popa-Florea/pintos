@@ -5,6 +5,9 @@
 #include "userprog/process.h"
 #endif
 
+/* Records the number of threads in mlfq */
+int mlfq_size = 0;
+
 static bool compare_priority_mlfq(
     const struct list_elem *, const struct list_elem *, void * UNUSED
 );
@@ -17,7 +20,6 @@ void add_to_mlfq(mlfq *mult_queue, struct list_elem *thread_elem) {
     mlfq_elem e;
     struct list thread_queue;
     e.priority = thread->priority;
-    e.size = 1;
     list_init(&thread_queue);
     e.queue = &thread_queue;
     list_push_back(e.queue, thread_elem);
@@ -25,16 +27,19 @@ void add_to_mlfq(mlfq *mult_queue, struct list_elem *thread_elem) {
   }
   else{
     list_push_back(queue_elem->queue, thread_elem);
-    queue_elem->size+=1;
   }
+  mlfq_size++;
 }
 
 /* Removes a thread from its level in multi-level feedback queue */
 void remove_from_mlfq (mlfq *mult_queue, struct list_elem *thread_elem) {
-  struct thread *t = list_entry(thread_elem, struct thread, ml_elem);
+  struct thread *t = list_entry(thread_elem, struct thread, elem);
   mlfq_elem *level = find_elem_of_priority(mult_queue, t->priority);
   list_remove(thread_elem);
-  level->size--;
+  if (list_empty(level->queue)) {
+    list_prev(&level->elem)->next = list_next(&level->elem);
+  }
+  mlfq_size--;
 }
 
 
@@ -53,8 +58,8 @@ static bool compare_priority_mlfq(const struct list_elem *a, const struct list_e
 
 /* Compares priority of two threads */
 static bool compare_thread_recent_cpu(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED){
-  struct thread *A = list_entry(a, struct thread, ml_elem);
-  struct thread *B = list_entry(b, struct thread, ml_elem);
+  struct thread *A = list_entry(a, struct thread, elem);
+  struct thread *B = list_entry(b, struct thread, elem);
 
   return convert_int_nearest(A->recent_cpu) < convert_int_nearest(B->recent_cpu);
 }
@@ -75,4 +80,8 @@ mlfq_elem *find_elem_of_priority(mlfq *mult_queue, int priority){
     }
   }
   return EMPTY_QUEUE;
+}
+
+int size_mlfq() {
+  return mlfq_size;
 }
