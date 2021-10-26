@@ -172,6 +172,7 @@ void
 thread_tick (void) 
 {
   struct thread *t = thread_current ();
+  //thread_print_stats();
 
   /* Update statistics. */
   if (t == idle_thread) {
@@ -186,9 +187,12 @@ thread_tick (void)
   }
 
   if (thread_mlfqs) {
-    t->recent_cpu = add_fps_int(t->recent_cpu,1);
+
+    fp_int new_recent_cpu = add_fps_int(t->recent_cpu,1);
+    t->recent_cpu = new_recent_cpu;
     if(timer_ticks () % TIMER_FREQ == 0) {
       load_avg = calculate_load_avg();
+      t->stats_updated = true;
       thread_foreach(&calculate_recent_cpu, NULL);
       calculate_priorities_all_threads();
     } else {
@@ -737,6 +741,7 @@ static void add_to_mlfq (struct thread *t) {
 
 /* Removes a thread from its level in mlfq */
 static void remove_from_mlfq (struct thread *t) {
+  ASSERT(!list_empty(&mlfq[t->priority]))
   list_remove(&t->elem);
   size_of_mlfq--;
 }
@@ -787,7 +792,7 @@ static int calculate_priority (struct thread *t)
 /* Calculates priorities of all running threads */
 static void calculate_priorities_all_threads () {
   struct list_elem *e;
-  for (e = list_begin (&all_list); e != list_end (&all_list); e = e->next){
+  for (e = list_begin (&all_list); e != list_end (&all_list); e = list_next(e)){
     struct thread *curr = list_entry(e, struct thread, elem);
     if(curr == idle_thread){
       continue;
@@ -795,7 +800,11 @@ static void calculate_priorities_all_threads () {
     if (curr->stats_updated) {
       int old_prior = curr->priority;
       curr->priority = calculate_priority(curr);
-      check_and_change_priority_level(old_prior, curr);
+      //printf("recent_cpu %d \n",curr->recent_cpu.val);
+      if(curr->status == THREAD_READY){
+        check_and_change_priority_level(old_prior, curr);
+      }
+      
     }
   }
 }
@@ -803,18 +812,14 @@ static void calculate_priorities_all_threads () {
 /* Calculates CPU usesage of thread */
 static void calculate_recent_cpu(struct thread *t, void *aux UNUSED)
 {
+  // printf("recent cp1: %d \n",convert_int_nearest(t->recent_cpu));
   fp_int double_load_avg = mult_fps_int(load_avg, 2);
-  
   t->recent_cpu = add_fps_int(mult_fps(div_fps(double_load_avg, 
                                       add_fps_int(double_load_avg, 1)), 
                               t->recent_cpu),
-                     t->nice);
-  t->stats_updated = true;
-
-  if (t->status == THREAD_READY) {
-    remove_from_mlfq(t);
-    add_to_mlfq(t);
-  }
+                    t->nice);
+  // printf("recent cp1: %d \n",convert_int_nearest(t->recent_cpu));
+  // t->stats_updated = true;
 }
 
 
