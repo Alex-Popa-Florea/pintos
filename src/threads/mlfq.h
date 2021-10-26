@@ -5,8 +5,8 @@
 #define EMPTY_QUEUE NULL
 
 /* Multi-Level Feedback Queue
-    - Stores elements of type mlfq_elem, each with a queue of threads of 
-      a certain priority    
+   = Array of pointers to different list structs, each corresponding
+     to a priority level
  */
 typedef struct list mlfq;
 
