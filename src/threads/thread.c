@@ -122,10 +122,11 @@ thread_init (void)
   initial_thread = running_thread ();
   initial_thread->status = THREAD_RUNNING;
   if (thread_mlfqs) {
-    init_thread_mlfq(initial_thread, "main", NICE_DEFAULT);
+    init_thread_mlfq (initial_thread, "main", NICE_DEFAULT);
   } else {
     init_thread (initial_thread, "main", PRI_DEFAULT);
   }
+  initial_thread->tid = allocate_tid ();
 
   // enum intr_level old_level;
   // old_level = intr_disable ();
@@ -183,25 +184,27 @@ thread_tick (void)
   if (++thread_ticks >= TIME_SLICE)
     intr_yield_on_return ();
 
-  t->recent_cpu = add_fps_int(t->recent_cpu,1);
+  if (thread_mlfqs) {
+    t->recent_cpu = add_fps_int(t->recent_cpu,1);
 
-  if(timer_ticks () % TIMER_FREQ == 0) {
-    load_avg = calculate_load_avg();
-    t->recent_cpu = calculate_recent_cpu(t);
-    update_thread_cpu = true;
-  } else {
-    update_thread_cpu = false;
-  }
-    
-  if ((timer_ticks () % TIME_SLICE == 0) && update_thread_cpu) {
-    t->priority = calculate_priority(t); 
-    //recalculate priorities for all 
-    calculate_priority_of_all_threads();
+    if(timer_ticks () % TIMER_FREQ == 0) {
+      load_avg = calculate_load_avg();
+      t->recent_cpu = calculate_recent_cpu(t);
+      update_thread_cpu = true;
+    } else {
+      update_thread_cpu = false;
+    }
+      
+    if ((timer_ticks () % TIME_SLICE == 0) && update_thread_cpu) {
+      t->priority = calculate_priority(t); 
+      //recalculate priorities for all 
+      calculate_priority_of_all_threads();
 
-    //intr_yield_on_return if the current thread has higher priority than the highest current thread
-    // is the comparison the righ way around?
-    if (t->priority >= get_highest_priority_mlfq(&mult_queue)) {
-      intr_yield_on_return ();
+      //intr_yield_on_return if the current thread has higher priority than the highest current thread
+      // is the comparison the righ way around?
+      if (t->priority >= get_highest_priority_mlfq(&mult_queue)) {
+        intr_yield_on_return ();
+      }
     }
   }
 }
@@ -253,8 +256,7 @@ thread_create (const char *name, int priority,
   } else {
     init_thread (t, name, priority);
   }
-  // make 
-  tid = t->tid = allocate_tid ();
+  // tid = t->tid = allocate_tid ();
 
   /* Prepare thread for first run by initializing its stack.
      Do this atomically so intermediate values for the 'stack' 
@@ -600,6 +602,7 @@ static void
 init_thread_mlfq(struct thread *t, const char *name, int niceness) {
   enum intr_level old_level;
 
+  ASSERT(thread_mlfqs);
   ASSERT (t != NULL);
   ASSERT (name != NULL);
   ASSERT (NICE_MIN <= niceness && niceness <= NICE_MAX);
@@ -610,7 +613,6 @@ init_thread_mlfq(struct thread *t, const char *name, int niceness) {
   t->stack = (uint8_t *) t + PGSIZE;
   t->magic = THREAD_MAGIC;
 
-  t->tid = allocate_tid ();
   if (initial_thread) {
     t->recent_cpu = (fp_int){0};
   } else {
@@ -619,13 +621,16 @@ init_thread_mlfq(struct thread *t, const char *name, int niceness) {
   t->nice = niceness;
   t->priority = calculate_priority (t);
   
+  //Do we need to do this for us? --------------
+  t->donated_priority = PRI_MIN; 
+  list_init (&t->held_locks);
+  t->needed_lock = NULL;
+  // ----------------
+
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
   intr_set_level (old_level);
 
-  //Do we need to do this for us?
-  t->donated_priority = PRI_MIN; 
-  list_init (&t->held_locks);
 }
 
 /* Allocates a SIZE-byte frame at the top of thread T's stack and
