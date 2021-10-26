@@ -627,6 +627,7 @@ next_thread_to_run (void)
 {
   if ((thread_mlfqs && (size_of_mlfq == 0)) || (!thread_mlfqs && list_empty (&ready_list))) {
       return idle_thread; 
+
   } 
   if (thread_mlfqs) {
     return get_next_thread_mlfq();
@@ -743,7 +744,7 @@ static int get_highest_prior_mlfq (void) {
   while (list_empty(&mlfq[i])) {
     i++;
   }
-  return PRIOR_FROM_INDEX(i);
+  return i;
 }
 
 /* Returns next thread to be scheduled from highest priority level in mlfq */
@@ -752,8 +753,9 @@ static struct thread *get_next_thread_mlfq (void) {
     return idle_thread;
   }
   int index = get_highest_prior_mlfq();
+  struct thread * thread = list_entry(list_pop_front(&mlfq[index]), struct thread, elem);
   size_of_mlfq--;
-  return list_entry(list_pop_front(&mlfq[index]), struct thread, elem);
+  return thread;
 }
 
 /* Checks thread is in correct priority level after recalculation */
