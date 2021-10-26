@@ -6,7 +6,6 @@
 #include <string.h>
 #include <stdbool.h>
 #include "threads/fixed-point.h"
-// #include "threads/mlfq.h"
 #include "threads/flags.h"
 #include "threads/interrupt.h"
 #include "threads/intr-stubs.h"
@@ -59,7 +58,6 @@ static long long user_ticks;    /* # of timer ticks in user programs. */
 #define TIME_SLICE 4            /* # of timer ticks to give each thread. */
 #define INITIAL_LOAD 0          /* Start value of load_avg */
 static unsigned thread_ticks;   /* # of timer ticks since last yield. */
-static bool update_thread_cpu = false;  /* Tracks changes in thread's recent_cpu field*/ 
 fp_int load_avg;                     /* Moving average of number of threads ready to run */
 
 /* If false (default), use round-robin scheduler.
@@ -69,7 +67,7 @@ bool thread_mlfqs;
 
 /* Multi-Level Feedback Queue */
 static struct list mlfq[PRI_MAX + 1];      /* Array of pointers to different levels in multi-level queue */
-static int size_of_mlfq;               /* Tracks number of threads in mlfq */
+static int size_of_mlfq;                   /* Tracks number of threads in mlfq */
 #define INDEX_FROM_PRIOR(P) (PRI_MAX - P)  /* Index of a priority level in mlfq */
 #define PRIOR_FROM_INDEX(I) (PRI_MAX - I)  /* Priority of level I in mlfq */
 
@@ -96,7 +94,8 @@ static void check_and_change_priority_level (int, struct thread *);
 
 /* Fixed-point arithmetic calculations for thread stats */
 static int calculate_priority (struct thread *);
-static fp_int calculate_recent_cpu (struct thread *);
+static void calculate_priorities_all_threads (void);
+static void calculate_recent_cpu (struct thread *, void * UNUSED);
 static fp_int calculate_load_avg (void);
 
 /* Initializes the threading system by transforming the code
@@ -120,6 +119,7 @@ thread_init (void)
   lock_init (&tid_lock);
   list_init (&ready_list);
   list_init (&all_list);
+  initial_thread = running_thread ();
   
   if (thread_mlfqs) {
     /* Initialise levels in multi-level feedback queue */
@@ -129,20 +129,14 @@ thread_init (void)
 
     size_of_mlfq = 0;
     load_avg = (fp_int){0};
+    initial_thread->recent_cpu = (fp_int){0};
+    initial_thread->nice = 0;
   }
 
   /* Set up a thread structure for the running thread. */
-  initial_thread = running_thread ();
   init_thread (initial_thread, "main", PRI_DEFAULT);
   initial_thread->status = THREAD_RUNNING;
   initial_thread->tid = allocate_tid ();
-  initial_thread->recent_cpu = (fp_int){0};
-  initial_thread->nice = 0;
-
-  enum intr_level old_level;
-  old_level = intr_disable ();
-
-  intr_set_level (old_level);
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.
@@ -186,18 +180,27 @@ thread_tick (void)
 #endif
   else {
     kernel_ticks++;
-    t->recent_cpu = add_fps_int(t->recent_cpu,1);
+    if (thread_mlfqs) {
+      t->recent_cpu = add_fps_int(t->recent_cpu,1);
+    }
   }
-  if(timer_ticks () % TIMER_FREQ == 0) {
-    load_avg = calculate_load_avg();
-    t->recent_cpu = calculate_recent_cpu(t);
-    update_thread_cpu = true;
-  } else {
-    update_thread_cpu = false;
-  }
-    
-  if ((timer_ticks () % TIME_SLICE == 0) && update_thread_cpu) {
-    t->priority = calculate_priority(t);
+
+  if (thread_mlfqs) {
+    if(timer_ticks () % TIMER_FREQ == 0) {
+      load_avg = calculate_load_avg();
+      thread_foreach(&calculate_recent_cpu, NULL);
+      // t->stats_updated = true; //don't need to set, assuming that the current thread is still in all threads to run
+    } else {
+      t->stats_updated = false;
+    }
+      
+    if ((timer_ticks () % TIME_SLICE == 0) && t->stats_updated) {
+      //which one do we doooo
+      // int old_prior = t->priority;
+      // t->priority = calculate_priority(t);
+      // check_and_change_priority_level(old_prior, &t);
+      calculate_priorities_all_threads();
+    }
   }
 
   /* Enforce preemption. */
@@ -313,7 +316,12 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  ist_push_back (&ready_list, &t->elem);
+
+  if (thread_mlfqs) {
+    add_to_mlfq(t);
+  } else {
+    list_push_back (&ready_list, &t->elem);
+  }
 
   t->status = THREAD_READY;
   intr_set_level (old_level);
@@ -385,7 +393,11 @@ thread_yield (void)
 
   old_level = intr_disable ();
   if (cur != idle_thread) {
-    list_push_back (&ready_list, &cur->elem);
+    if (thread_mlfqs) {
+      add_to_mlfq(cur);
+    } else {
+      list_push_back (&ready_list, &cur->elem);
+    }
   }
   cur->status = THREAD_READY;
   schedule ();
@@ -579,6 +591,7 @@ init_thread (struct thread *t, const char *name, int priority)
       t->recent_cpu = thread_current ()->recent_cpu;
       t->nice = thread_current ()->nice;
     }
+    t->stats_updated = false;
   } else {
     t->priority = priority;
   } 
@@ -612,7 +625,7 @@ alloc_frame (struct thread *t, size_t size)
 static struct thread *
 next_thread_to_run (void) 
 {
-  if (list_empty (&ready_list) || (thread_mlfqs && (size_of_mlfq == 0))) {
+  if ((thread_mlfqs && (size_of_mlfq == 0)) || (!thread_mlfqs && list_empty (&ready_list))) {
       return idle_thread; 
   } 
   if (thread_mlfqs) {
@@ -735,6 +748,9 @@ static int get_highest_prior_mlfq (void) {
 
 /* Returns next thread to be scheduled from highest priority level in mlfq */
 static struct thread *get_next_thread_mlfq (void) {
+  if (size_of_mlfq == 0) {
+    return idle_thread;
+  }
   int index = get_highest_prior_mlfq();
   size_of_mlfq--;
   return list_entry(list_pop_front(&mlfq[index]), struct thread, elem);
@@ -763,16 +779,35 @@ static int calculate_priority (struct thread *t)
   return priority;
 }
 
+/* Calculates priorities of all running threads */
+static void calculate_priorities_all_threads () {
+  struct list_elem *e;
+  for (e = list_begin (&all_list); e != list_end (&all_list); e = e->next){
+    struct thread *curr = list_entry(e, struct thread, elem);
+    if (curr->stats_updated) {
+      int old_prior = curr->priority;
+      curr->priority = calculate_priority(curr);
+      check_and_change_priority_level(old_prior, curr);
+    }
+  }
+}
+
 /* Calculates CPU usesage of thread */
-static fp_int calculate_recent_cpu(struct thread *t)
+static void calculate_recent_cpu(struct thread *t, void *aux UNUSED)
 {
   fp_int recent_cpu = t->recent_cpu;
   fp_int double_recent_cpu = mult_fps_int(recent_cpu, 2);
   
-  return add_fps_int(mult_fps(div_fps(double_recent_cpu, 
+  t->recent_cpu = add_fps_int(mult_fps(div_fps(double_recent_cpu, 
                                       add_fps_int(double_recent_cpu, 1)), 
                               recent_cpu),
                      t->nice);
+  t->stats_updated = true;
+
+  if (t->status == THREAD_READY) {
+    remove_from_mlfq(t);
+    add_to_mlfq(t);
+  }
 }
 
 
