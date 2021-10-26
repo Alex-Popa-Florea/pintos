@@ -116,13 +116,23 @@ sema_up (struct semaphore *sema)
   ASSERT (sema != NULL);
 
   old_level = intr_disable ();
-  if (!list_empty (&sema->waiters)) { 
-    struct list_elem* highest_priority_thread = list_max (&sema->waiters, is_thread_lower_priority, NULL);
-    list_remove (highest_priority_thread);
-    thread_unblock (list_entry (highest_priority_thread, struct thread, elem));
+  if (!list_empty (&sema->waiters)) {
+    if (thread_mlfqs) {
+      // INES this is in order of first come first served not in order of base priority
+      thread_unblock (list_entry (list_pop_front (&sema->waiters), struct thread, elem));
+    } else {
+      struct list_elem* highest_priority_thread = list_max (&sema->waiters, is_thread_lower_priority, NULL);
+      list_remove (highest_priority_thread);
+      thread_unblock (list_entry (highest_priority_thread, struct thread, elem));
+    }
   }
+
   sema->value++;
-  thread_yield ();
+  // INES dont thread yield if interrupts were off when the function started
+  // INES no need to yield every time- only if priority of unblocked thread is higher than current thread
+  if (!thread_mlfqs) {
+    thread_yield();
+  }
   intr_set_level (old_level);
 }
 
@@ -240,16 +250,28 @@ lock_acquire (struct lock *lock)
   ASSERT (!intr_context ());
   ASSERT (!lock_held_by_current_thread (lock));
 
-  if(!lock_try_acquire (lock)){
-    thread_current ()->needed_lock = lock;
-    compute_priorities (thread_current ());
+  if (!thread_mlfqs) {
+    // INES this logic doesn't make sense it has different functionality to the original lock acquire
+    // you've said that:
+    // if the lock is previously unheld you don't enter the if statement
+    // so you're not recomputing thread currents priority
+    // or changing the max donated priority of waiters
+    // perhaps move those lines of code into try acquire
+    // it's less messy to not modify thread_acquire to use try_acquire
+    if(!lock_try_acquire (lock)){
+      thread_current ()->needed_lock = lock;
+      compute_priorities (thread_current ());
+      sema_down (&lock->semaphore);
+      lock->holder = thread_current ();
+      lock->max_donated_priority_of_waiters = get_max_priority_of_waiters (lock);
+      thread_current ()->needed_lock = NULL;
+    }
+
+    list_push_back (&thread_current ()->held_locks, &lock->elem);
+  } else {
     sema_down (&lock->semaphore);
     lock->holder = thread_current ();
-    lock->max_donated_priority_of_waiters = get_max_priority_of_waiters (lock);
-    thread_current ()->needed_lock = NULL;
   }
-
-  list_push_back (&thread_current ()->held_locks, &lock->elem);
 }
 
 /* Tries to acquires LOCK and returns true if successful or false
@@ -285,21 +307,24 @@ lock_release (struct lock *lock)
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
   // The current thread no longer holds this lock
-  list_remove (&lock->elem);
   lock->holder = NULL;
+  
+  if (!thread_mlfqs) {
+    list_remove (&lock->elem);
 
-  // Calculate the remaining donated priority held by the current thread
-  int remaining_donated_priority = PRI_MIN;
-  // Loop through the remaining locks held by the current thread
-  struct list_elem *current_lock_elem = list_begin (&thread_current ()->held_locks);
-  while (current_lock_elem != list_tail (&thread_current ()->held_locks)) {
-    struct lock *current_lock = list_entry (current_lock_elem, struct lock, elem);
-    if (remaining_donated_priority < current_lock->max_donated_priority_of_waiters) {
-      remaining_donated_priority = current_lock->max_donated_priority_of_waiters;
+    // Calculate the remaining donated priority held by the current thread
+    int remaining_donated_priority = PRI_MIN;
+    // Loop through the remaining locks held by the current thread
+    struct list_elem *current_lock_elem = list_begin (&thread_current ()->held_locks);
+    while (current_lock_elem != list_tail (&thread_current ()->held_locks)) {
+      struct lock *current_lock = list_entry (current_lock_elem, struct lock, elem);
+      if (remaining_donated_priority < current_lock->max_donated_priority_of_waiters) {
+        remaining_donated_priority = current_lock->max_donated_priority_of_waiters;
+      }
+      current_lock_elem = current_lock_elem->next;
     }
-    current_lock_elem = current_lock_elem->next;
+    thread_current ()->donated_priority = remaining_donated_priority;
   }
-  thread_current ()->donated_priority = remaining_donated_priority;
   sema_up (&lock->semaphore);
 }
 
