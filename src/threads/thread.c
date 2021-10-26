@@ -428,9 +428,11 @@ is_thread_lower_priority (const struct list_elem *a,
                           void *aux UNUSED)
 {
   struct thread *t1 = list_entry (a, struct thread, elem);
-  int effective_priority1 = get_effective_priority (t1);
   struct thread *t2 = list_entry (b, struct thread, elem);
-  int effective_priority2 = get_effective_priority (t2);
+  
+  int effective_priority1 = thread_mlfqs ? t1->priority : get_effective_priority (t1);
+  int effective_priority2 = thread_mlfqs ? t2->priority : get_effective_priority (t2);
+
   return effective_priority1 < effective_priority2;
 }
 
@@ -786,6 +788,9 @@ static void calculate_priorities_all_threads () {
   struct list_elem *e;
   for (e = list_begin (&all_list); e != list_end (&all_list); e = e->next){
     struct thread *curr = list_entry(e, struct thread, elem);
+    if(curr == idle_thread){
+      continue;
+    }
     if (curr->stats_updated) {
       int old_prior = curr->priority;
       curr->priority = calculate_priority(curr);
