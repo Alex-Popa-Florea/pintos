@@ -57,6 +57,9 @@ static long long user_ticks;    /* # of timer ticks in user programs. */
 /* Scheduling. */
 #define TIME_SLICE 4            /* # of timer ticks to give each thread. */
 #define INITIAL_LOAD 0          /* Start value of load_avg */
+#define NICE_MAX 20             /* Maximum niceness of a thread */
+#define NICE_MIN -20            /* Minimum niceness of a thread */
+#define NICE_DEFAULT 0          /* Default niceness of a thread */
 static unsigned thread_ticks;   /* # of timer ticks since last yield. */
 fp_int load_avg;                     /* Moving average of number of threads ready to run */
 
@@ -128,9 +131,9 @@ thread_init (void)
     }
 
     size_of_mlfq = 0;
-    load_avg = (fp_int){0};
+    load_avg = (fp_int){INITIAL_LOAD};
     initial_thread->recent_cpu = (fp_int){0};
-    initial_thread->nice = 0;
+    initial_thread->nice = NICE_DEFAULT;
   }
 
   /* Set up a thread structure for the running thread. */
@@ -180,7 +183,6 @@ thread_tick (void)
 #endif
   else {
     kernel_ticks++;
-    
   }
 
   if (thread_mlfqs) {
@@ -188,17 +190,15 @@ thread_tick (void)
     if(timer_ticks () % TIMER_FREQ == 0) {
       load_avg = calculate_load_avg();
       thread_foreach(&calculate_recent_cpu, NULL);
-      // t->stats_updated = true; //don't need to set, assuming that the current thread is still in all threads to run
+      calculate_priorities_all_threads();
     } else {
       t->stats_updated = false;
     }
       
     if ((timer_ticks () % TIME_SLICE == 0) && t->stats_updated) {
-      //which one do we doooo
-      // int old_prior = t->priority;
-      // t->priority = calculate_priority(t);
-      // check_and_change_priority_level(old_prior, &t);
-      calculate_priorities_all_threads();
+      int old_prior = t->priority;
+      t->priority = calculate_priority(t);
+      check_and_change_priority_level(old_prior, t);
     }
   }
 
@@ -470,10 +470,12 @@ thread_get_priority (void)
 void
 thread_set_nice (int new_nice) 
 {
+  ASSERT (NICE_MIN <= new_nice && new_nice <= NICE_MAX);
+  
   struct thread* cur = thread_current();
   cur->nice = new_nice;
   cur->priority = calculate_priority(cur);
-  if (cur->priority <= get_highest_prior_mlfq()) {
+  if (cur->priority < get_highest_prior_mlfq()) {
     thread_yield();
   }
 }
