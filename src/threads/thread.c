@@ -132,14 +132,14 @@ thread_init (void)
 
     size_of_mlfq = 0;
     load_avg = (fp_int){INITIAL_LOAD};
-    initial_thread->recent_cpu = (fp_int){0};
-    initial_thread->nice = NICE_DEFAULT;
   }
 
   /* Set up a thread structure for the running thread. */
   init_thread (initial_thread, "main", PRI_DEFAULT);
   initial_thread->status = THREAD_RUNNING;
   initial_thread->tid = allocate_tid ();
+  initial_thread->recent_cpu = (fp_int){0};
+  initial_thread->nice = NICE_DEFAULT;
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.
@@ -172,6 +172,7 @@ void
 thread_tick (void) 
 {
   struct thread *t = thread_current ();
+  // printf("Thread: %s\n", t->name);
   //thread_print_stats();
 
   /* Update statistics. */
@@ -187,28 +188,34 @@ thread_tick (void)
   }
 
   if (thread_mlfqs) {
-
-    fp_int new_recent_cpu = add_fps_int(t->recent_cpu,1);
-    t->recent_cpu = new_recent_cpu;
     if(timer_ticks () % TIMER_FREQ == 0) {
       load_avg = calculate_load_avg();
-      t->stats_updated = true;
+      // t->stats_updated = true;
       thread_foreach(&calculate_recent_cpu, NULL);
-      calculate_priorities_all_threads();
-    } else {
-      t->stats_updated = false;
+      // calculate_priorities_all_threads();
     }
-      
-    if ((timer_ticks () % TIME_SLICE == 0) && t->stats_updated) {
-      int old_prior = t->priority;
-      t->priority = calculate_priority(t);
-      check_and_change_priority_level(old_prior, t);
+    
+    if (t != idle_thread) {
+      fp_int new_recent_cpu = add_fps_int(t->recent_cpu,1);
+      t->recent_cpu = new_recent_cpu;
+    }
+
+    if (timer_ticks () % TIME_SLICE == 0) {
+      calculate_priorities_all_threads();
     }
   }
 
   /* Enforce preemption. */
-  if (++thread_ticks >= TIME_SLICE)
+  if (++thread_ticks >= TIME_SLICE) {
+
+    // printf("Priority: %d\n", t->priority);
+    // printf("Nice: %d\n", t->nice);
+    // printf("Recent cpu: %d\n", t->recent_cpu.val);
+    // printf("Load avg: %d\n", load_avg.val);
+
+
     intr_yield_on_return ();
+  }
 }
 
 /* Prints thread statistics. */
@@ -593,12 +600,12 @@ init_thread (struct thread *t, const char *name, int priority)
   t->magic = THREAD_MAGIC;
 
   if (thread_mlfqs) {
-    t->priority = calculate_priority (t);
     if (t != initial_thread) {
       t->recent_cpu = thread_current ()->recent_cpu;
       t->nice = thread_current ()->nice;
     }
-    t->stats_updated = false;
+    t->priority = calculate_priority (t);
+    // t->stats_updated = false;
   } else {
     t->priority = priority;
   } 
@@ -735,6 +742,9 @@ uint32_t thread_stack_ofs = offsetof (struct thread, stack);
 /* --------------------- BSD Scheduler Functions ----------------------------- */
 /* Adds a thread to the respective level in mlfq */
 static void add_to_mlfq (struct thread *t) {
+  if (t == idle_thread) {
+    return;
+  }
   list_push_back(&(mlfq[INDEX_FROM_PRIOR((t->priority))]), &t->elem);
   size_of_mlfq++;
 }
@@ -769,6 +779,7 @@ static struct thread *get_next_thread_mlfq (void) {
 /* Checks thread is in correct priority level after recalculation */
 static void check_and_change_priority_level (int prev_prior, struct thread *t) {
   if (prev_prior != t->priority) {
+    printf("thread %s is being moved from %d to %d\n", t->name, prev_prior, t->priority);
     remove_from_mlfq(t);
     add_to_mlfq(t);
   }
@@ -797,14 +808,10 @@ static void calculate_priorities_all_threads () {
     if(curr == idle_thread){
       continue;
     }
-    if (curr->stats_updated) {
-      int old_prior = curr->priority;
-      curr->priority = calculate_priority(curr);
-      //printf("recent_cpu %d \n",curr->recent_cpu.val);
-      if(curr->status == THREAD_READY){
-        check_and_change_priority_level(old_prior, curr);
-      }
-      
+    int old_prior = curr->priority;
+    curr->priority = calculate_priority(curr);
+    if(curr->status == THREAD_READY){
+      check_and_change_priority_level(old_prior, curr);
     }
   }
 }
@@ -822,7 +829,6 @@ static void calculate_recent_cpu(struct thread *t, void *aux UNUSED)
   // t->stats_updated = true;
 }
 
-
 /* Calculates new system load_avg */
 static fp_int calculate_load_avg()
 {
@@ -831,5 +837,4 @@ static fp_int calculate_load_avg()
   fp_int coeff1 = div_fps_int(convert_fp(59), 60);
   fp_int coeff2 = div_fps_int(convert_fp(1), 60);
   return add_fps(mult_fps(coeff1, load_avg), mult_fps(coeff2, convert_fp(num_of_threads)));
-
 }

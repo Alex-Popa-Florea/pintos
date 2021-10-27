@@ -118,24 +118,21 @@ sema_up (struct semaphore *sema)
   old_level = intr_disable ();
 
   struct list_elem* highest_priority_thread = NULL;
-  if (!thread_mlfqs) {
-    if (!list_empty (&sema->waiters)) { 
-      highest_priority_thread = list_max (&sema->waiters, is_thread_lower_priority, NULL);
-      list_remove (highest_priority_thread);
-      thread_unblock (list_entry (highest_priority_thread, struct thread, elem));
-    }
-    sema->value++;
-
-  } else {
-    if (!list_empty (&sema->waiters)) 
-    thread_unblock (list_entry (list_pop_front (&sema->waiters),
-                                struct thread, elem));
-    sema->value++;
+  // if (!thread_mlfqs) {
+  if (!list_empty (&sema->waiters)) { 
+    highest_priority_thread = list_max (&sema->waiters, is_thread_lower_priority, NULL);
+    list_remove (highest_priority_thread);
+    thread_unblock (list_entry (highest_priority_thread, struct thread, elem));
   }
+  sema->value++;
   intr_set_level (old_level);
   if (highest_priority_thread) {
     if (is_thread_lower_priority(&thread_current()->elem, highest_priority_thread, NULL)) {
-      if(!intr_context()) thread_yield();
+      if(!intr_context ()) {
+        thread_yield ();
+      } else {
+        intr_yield_on_return ();
+      }
     }
   }
   
