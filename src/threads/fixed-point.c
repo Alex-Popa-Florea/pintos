@@ -14,13 +14,13 @@ inline  fp_int convert_fp(int32_t n)
 /* Converts fixed-point to integer (rounding to zero) */
 inline  int32_t convert__int_zero(fp_int x)
 {
-    return (int32_t) x.val / FIXED_F;
+    return (int32_t) (x.val / FIXED_F);
 }
 
 /* Converts fixed-point to integer (rounding to nearest int) */
 inline  int32_t convert_int_nearest(fp_int x)
 {
-    return (int32_t) x.val >= 0 ? (x.val + FIXED_F/2 ) /FIXED_F : (x.val - FIXED_F/2 ) /FIXED_F;
+    return (int32_t) (x.val >= 0 ? ((x.val + FIXED_F/2 ) /FIXED_F) : ((x.val - FIXED_F/2) /FIXED_F));
 }
 
 /* Adds two fixed-point numbers */

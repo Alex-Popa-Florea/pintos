@@ -801,12 +801,11 @@ static void calculate_priorities_all_threads () {
 /* Calculates CPU usesage of thread */
 static void calculate_recent_cpu(struct thread *t, void *aux UNUSED)
 {
-  fp_int recent_cpu = t->recent_cpu;
-  fp_int double_recent_cpu = mult_fps_int(recent_cpu, 2);
+  fp_int double_load_avg = mult_fps_int(load_avg, 2);
   
-  t->recent_cpu = add_fps_int(mult_fps(div_fps(double_recent_cpu, 
-                                      add_fps_int(double_recent_cpu, 1)), 
-                              recent_cpu),
+  t->recent_cpu = add_fps_int(mult_fps(div_fps(double_load_avg, 
+                                      add_fps_int(double_load_avg, 1)), 
+                              t->recent_cpu),
                      t->nice);
   t->stats_updated = true;
 

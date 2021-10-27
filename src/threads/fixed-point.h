@@ -26,4 +26,4 @@ fp_int mult_fps_int(fp_int , int32_t );
 fp_int div_fps(fp_int , fp_int );
 fp_int div_fps_int(fp_int , int32_t );
 
-#endif /* threads/fixed-point.h */
+#endif /* threads/fixed-point.h */  
