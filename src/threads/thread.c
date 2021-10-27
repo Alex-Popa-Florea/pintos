@@ -165,17 +165,17 @@ thread_tick (void)
 
   if (thread_mlfqs) {
     if (t != idle_thread) {
-      fp_int new_recent_cpu = add_fps_int(t->recent_cpu,1);
+      fp_int new_recent_cpu = add_fps_int (t->recent_cpu,1);
       t->recent_cpu = new_recent_cpu;
     }
 
     if(timer_ticks () % TIMER_FREQ == 0) {
       load_avg = calculate_load_avg();
-      thread_foreach(&calculate_recent_cpu, NULL);
+      thread_foreach (&calculate_recent_cpu, NULL);
     }
     
     if (timer_ticks () % TIME_SLICE == 0) {
-      thread_foreach(&calculate_priority, NULL);
+      thread_foreach (&calculate_priority, NULL);
     }
   }
 
@@ -451,11 +451,11 @@ thread_set_nice (int new_nice)
   ASSERT (NICE_MIN <= new_nice && new_nice <= NICE_MAX);
 
   if (thread_current () != initial_thread) {
-    struct thread* cur = thread_current();
+    struct thread* cur = thread_current ();
     cur->nice = new_nice;
-    calculate_priority(cur, NULL);
+    calculate_priority (cur, NULL);
 
-    if (cur->priority < list_entry(list_back(&ready_list), struct thread, elem)->priority) {
+    if (cur->priority < list_entry (list_back (&ready_list), struct thread, elem)->priority) {
       thread_yield();
     }
   }
@@ -617,7 +617,7 @@ next_thread_to_run (void)
   } 
   struct list_elem* highest_priority_thread;
   if (thread_mlfqs) {
-    highest_priority_thread = list_pop_back(&ready_list);
+    highest_priority_thread = list_pop_back (&ready_list);
   } else {
     highest_priority_thread = list_max (&ready_list, is_thread_lower_priority, NULL);
     list_remove (highest_priority_thread);
@@ -723,7 +723,7 @@ static void calculate_priority (struct thread *t, void *aux UNUSED)
   } else {
 
     int pri_max_min_double_nice = PRI_MAX - (t->nice * 2);
-    priority = convert_int_nearest(sub_fps(convert_fp(pri_max_min_double_nice), div_fps_int(t->recent_cpu, 4)));
+    priority = convert_int_nearest (sub_fps (convert_fp (pri_max_min_double_nice), div_fps_int (t->recent_cpu, 4)));
     if (priority < PRI_MIN) {
       priority = PRI_MIN;
     } else if (priority > PRI_MAX) {
@@ -736,9 +736,9 @@ static void calculate_priority (struct thread *t, void *aux UNUSED)
 /* Calculates CPU usage of thread */
 static void calculate_recent_cpu(struct thread *t, void *aux UNUSED)
 {
-  fp_int double_load_avg = mult_fps_int(load_avg, 2);
-  t->recent_cpu = add_fps_int(mult_fps(div_fps(double_load_avg, 
-                                                add_fps_int(double_load_avg, 1)
+  fp_int double_load_avg = mult_fps_int (load_avg, 2);
+  t->recent_cpu = add_fps_int (mult_fps (div_fps (double_load_avg, 
+                                                add_fps_int (double_load_avg, 1)
                                               ), 
                                       t->recent_cpu
                                       ),
@@ -752,10 +752,10 @@ static fp_int calculate_load_avg()
   int idle_t = (thread_current () != idle_thread) ? 1 : 0;
   int num_of_threads = idle_t + threads_ready ();
 
-  fp_int load_coeff = mult_fps(convert_fp(59), load_avg);
-  return add_fps(div_fps_int(load_coeff, 60), 
-                  div_fps(convert_fp(num_of_threads), 
-                          convert_fp(60)
+  fp_int load_coeff = mult_fps (convert_fp (59), load_avg);
+  return add_fps(div_fps_int (load_coeff, 60), 
+                  div_fps (convert_fp (num_of_threads), 
+                          convert_fp (60)
                           )
                 );
 }
