@@ -61,7 +61,7 @@ static long long user_ticks;    /* # of timer ticks in user programs. */
 #define NICE_MIN -20            /* Minimum niceness of a thread */
 #define NICE_DEFAULT 0          /* Default niceness of a thread */
 static unsigned thread_ticks;   /* # of timer ticks since last yield. */
-fp_int load_avg;                     /* Moving average of number of threads ready to run */
+static fp_int load_avg;         /* Moving average of number of threads ready to run */
 
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
@@ -84,7 +84,7 @@ static tid_t allocate_tid (void);
 
 /* Fixed-point arithmetic calculations for thread stats */
 static void calculate_priority (struct thread *, void * UNUSED);
-// static void calc_recent_cpu_and_prior (struct thread * , void * UNUSED);
+static void calc_recent_cpu_and_prior (struct thread * , void * UNUSED);
 static void calculate_recent_cpu (struct thread *, void * UNUSED);
 static fp_int calculate_load_avg (void);
 
@@ -170,14 +170,16 @@ thread_tick (void)
       t->recent_cpu = new_recent_cpu;
     }
 
-    if(timer_ticks () % TIMER_FREQ == 0) {
+    if(timer_ticks () % TIMER_FREQ == 0) { //100 - every second
       //recalculates load average and recent_cpu for all threads
       load_avg = calculate_load_avg();
-      thread_foreach(&calculate_recent_cpu, NULL);
+      // thread_foreach(&calculate_recent_cpu, NULL);
+      thread_foreach(&calc_recent_cpu_and_prior, NULL);
     }
     
-    if (timer_ticks () % TIME_SLICE == 0) {
-      thread_foreach(&calculate_priority, NULL);
+    if (timer_ticks () % TIME_SLICE == 0) { //4  - every 4th tick
+      // thread_foreach(&calculate_priority, NULL);
+      calculate_priority(t, NULL);
     }
   }
 
@@ -296,11 +298,12 @@ thread_unblock (struct thread *t)
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
 
-  if (thread_mlfqs) {
-    list_insert_ordered (&ready_list, &t->elem, is_thread_lower_priority, NULL);
-  } else {
-    list_push_back (&ready_list, &t->elem);
-  }
+  // if (thread_mlfqs) {
+  //   list_insert_ordered (&ready_list, &t->elem, is_thread_lower_priority, NULL);
+  // } else {
+  //   list_push_back (&ready_list, &t->elem);
+  // }
+  list_push_back (&ready_list, &t->elem);
 
   t->status = THREAD_READY;
   intr_set_level (old_level);
@@ -372,11 +375,12 @@ thread_yield (void)
 
   old_level = intr_disable ();
   if (cur != idle_thread) {
-    if (thread_mlfqs) {
-      list_insert_ordered (&ready_list, &cur->elem, is_thread_lower_priority, NULL);
-    } else {
-      list_push_back (&ready_list, &cur->elem);
-    }
+    // if (thread_mlfqs) {
+    //   list_insert_ordered (&ready_list, &cur->elem, is_thread_lower_priority, NULL);
+    // } else {
+    //   list_push_back (&ready_list, &cur->elem);
+    // }
+    list_push_back (&ready_list, &cur->elem);
   }
   cur->status = THREAD_READY;
   schedule ();
@@ -618,13 +622,15 @@ next_thread_to_run (void)
       return idle_thread; 
 
   } 
-  struct list_elem* highest_priority_thread;
-  if (thread_mlfqs) {
-    highest_priority_thread = list_pop_back(&ready_list);
-  } else {
-    highest_priority_thread = list_max (&ready_list, is_thread_lower_priority, NULL);
-    list_remove (highest_priority_thread);
-  }
+  struct list_elem* highest_priority_thread = list_max (&ready_list, is_thread_lower_priority, NULL);
+  //   list_remove (highest_priority_thread);
+  // if (thread_mlfqs) {
+  //   highest_priority_thread = list_pop_back(&ready_list);
+  // } else {
+  //   highest_priority_thread = list_max (&ready_list, is_thread_lower_priority, NULL);
+    // list_remove (highest_priority_thread);
+  // }
+  list_remove (highest_priority_thread);
   return list_entry (highest_priority_thread, struct thread, elem);
 }
 
@@ -736,20 +742,12 @@ static void calculate_priority (struct thread *t, void *aux UNUSED)
   t->priority = priority;
 }
 
-// /* Recalculates the recent_cpu and priority of a thread */
-// static void calc_recent_cpu_and_prior (struct thread *t, void *aux UNUSED) 
-// {
-//   bool in_mlfq = false;
-//   if (t->status == THREAD_READY) {
-//     in_mlfq = true;
-//     list_remove (&t->elem);
-//   }
-//   calculate_recent_cpu (t, NULL);
-//   calculate_priority (t, NULL);
-//   if (in_mlfq) {
-//     list_insert_ordered(&ready_list, &t->elem, is_thread_lower_priority, NULL);
-//   }
-// }
+/* Recalculates the recent_cpu and priority of a thread */
+static void calc_recent_cpu_and_prior (struct thread *t, void *aux UNUSED) 
+{
+  calculate_recent_cpu (t, NULL);
+  calculate_priority (t, NULL);
+}
 
 /* Calculates CPU usage of thread */
 static void calculate_recent_cpu(struct thread *t, void *aux UNUSED)
