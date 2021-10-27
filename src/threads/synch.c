@@ -117,9 +117,10 @@ sema_up (struct semaphore *sema)
 
   old_level = intr_disable ();
 
+  struct list_elem* highest_priority_thread = NULL;
   //if (!thread_mlfqs) {
     if (!list_empty (&sema->waiters)) { 
-      struct list_elem* highest_priority_thread = list_max (&sema->waiters, is_thread_lower_priority, NULL);
+      highest_priority_thread = list_max (&sema->waiters, is_thread_lower_priority, NULL);
       list_remove (highest_priority_thread);
       thread_unblock (list_entry (highest_priority_thread, struct thread, elem));
     }
@@ -132,7 +133,12 @@ sema_up (struct semaphore *sema)
   //   sema->value++;
   // }
   intr_set_level (old_level);
-  if(!intr_context()) thread_yield();
+  if (highest_priority_thread) {
+    if (get_effective_priority (list_entry (highest_priority_thread, struct thread, elem)) > get_effective_priority (thread_current ())) {
+      if(!intr_context()) thread_yield();
+    }
+  }
+  
 }
 
 static void sema_test_helper (void *sema_);

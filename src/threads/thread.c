@@ -169,7 +169,7 @@ void
 thread_tick (void) 
 {
   struct thread *t = thread_current ();
-  
+
   /* Update statistics. */
   if (t == idle_thread) {
     idle_ticks++;
@@ -180,12 +180,11 @@ thread_tick (void)
 #endif
   else {
     kernel_ticks++;
-    if (thread_mlfqs) {
-      t->recent_cpu = add_fps_int(t->recent_cpu,1);
-    }
+    
   }
 
   if (thread_mlfqs) {
+    t->recent_cpu = add_fps_int(t->recent_cpu,1);
     if(timer_ticks () % TIMER_FREQ == 0) {
       load_avg = calculate_load_avg();
       thread_foreach(&calculate_recent_cpu, NULL);
