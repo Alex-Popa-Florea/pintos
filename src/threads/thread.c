@@ -61,7 +61,7 @@ static long long user_ticks;    /* # of timer ticks in user programs. */
 #define NICE_MIN -20            /* Minimum niceness of a thread */
 #define NICE_DEFAULT 0          /* Default niceness of a thread */
 static unsigned thread_ticks;   /* # of timer ticks since last yield. */
-fp_int load_avg;                     /* Moving average of number of threads ready to run */
+fp_int load_avg;                /* Moving average of number of threads ready to run */
 
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
@@ -84,7 +84,6 @@ static tid_t allocate_tid (void);
 
 /* Fixed-point arithmetic calculations for thread stats */
 static void calculate_priority (struct thread *, void * UNUSED);
-// static void calc_recent_cpu_and_prior (struct thread * , void * UNUSED);
 static void calculate_recent_cpu (struct thread *, void * UNUSED);
 static fp_int calculate_load_avg (void);
 
@@ -171,7 +170,6 @@ thread_tick (void)
     }
 
     if(timer_ticks () % TIMER_FREQ == 0) {
-      //recalculates load average and recent_cpu for all threads
       load_avg = calculate_load_avg();
       thread_foreach(&calculate_recent_cpu, NULL);
     }
@@ -474,14 +472,14 @@ thread_get_nice (void)
 int
 thread_get_load_avg (void) 
 {
-  return convert_int_nearest(mult_fps_int(load_avg,100));
+  return convert_int_nearest (mult_fps_int (load_avg,100));
 }
 
 /* Returns 100 times the current thread's recent_cpu value. */
 int
 thread_get_recent_cpu (void) 
 {
-  return convert_int_nearest(mult_fps_int(thread_current()->recent_cpu,100));
+  return convert_int_nearest (mult_fps_int (thread_current ()->recent_cpu,100));
 }
 
 /* Idle thread.  Executes when no other thread is ready to run.
@@ -579,7 +577,6 @@ init_thread (struct thread *t, const char *name, int priority)
       t->recent_cpu = (fp_int){0};
       t->nice = NICE_DEFAULT;
     }
-    // t->priority = calculate_priority (t, NULL);
     calculate_priority (t, NULL);
   } else {
     t->priority = priority;
@@ -735,21 +732,6 @@ static void calculate_priority (struct thread *t, void *aux UNUSED)
   }
   t->priority = priority;
 }
-
-// /* Recalculates the recent_cpu and priority of a thread */
-// static void calc_recent_cpu_and_prior (struct thread *t, void *aux UNUSED) 
-// {
-//   bool in_mlfq = false;
-//   if (t->status == THREAD_READY) {
-//     in_mlfq = true;
-//     list_remove (&t->elem);
-//   }
-//   calculate_recent_cpu (t, NULL);
-//   calculate_priority (t, NULL);
-//   if (in_mlfq) {
-//     list_insert_ordered(&ready_list, &t->elem, is_thread_lower_priority, NULL);
-//   }
-// }
 
 /* Calculates CPU usage of thread */
 static void calculate_recent_cpu(struct thread *t, void *aux UNUSED)
