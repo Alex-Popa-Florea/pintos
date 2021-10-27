@@ -134,7 +134,7 @@ sema_up (struct semaphore *sema)
   // }
   intr_set_level (old_level);
   if (highest_priority_thread) {
-    if (get_effective_priority (list_entry (highest_priority_thread, struct thread, elem)) > get_effective_priority (thread_current ())) {
+    if (is_thread_lower_priority(&thread_current()->elem, highest_priority_thread, NULL)) {
       if(!intr_context()) thread_yield();
     }
   }
