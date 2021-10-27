@@ -83,9 +83,9 @@ static tid_t allocate_tid (void);
 /* Helper functions for BSD scheduler */
 
 /* Fixed-point arithmetic calculations for thread stats */
-static int calculate_priority (struct thread *);
-static void calc_recent_cpu_and_prior (struct thread * , void * UNUSED);
-static void calculate_recent_cpu (struct thread *);
+static void calculate_priority (struct thread *, void * UNUSED);
+// static void calc_recent_cpu_and_prior (struct thread * , void * UNUSED);
+static void calculate_recent_cpu (struct thread *, void * UNUSED);
 static fp_int calculate_load_avg (void);
 
 /* Initializes the threading system by transforming the code
@@ -171,13 +171,13 @@ thread_tick (void)
     }
 
     if(timer_ticks () % TIMER_FREQ == 0) {
-      //recalculates load average and recent_cpu and priority for all threads
+      //recalculates load average and recent_cpu for all threads
       load_avg = calculate_load_avg();
-      thread_foreach(&calc_recent_cpu_and_prior, NULL);
+      thread_foreach(&calculate_recent_cpu, NULL);
     }
     
     if (timer_ticks () % TIME_SLICE == 0) {
-      t->priority = calculate_priority(t);
+      thread_foreach(&calculate_priority, NULL);
     }
   }
 
@@ -455,7 +455,7 @@ thread_set_nice (int new_nice)
   if (thread_current () != initial_thread) {
     struct thread* cur = thread_current();
     cur->nice = new_nice;
-    cur->priority = calculate_priority(cur);
+    calculate_priority(cur, NULL);
 
     if (cur->priority < list_entry(list_back(&ready_list), struct thread, elem)->priority) {
       thread_yield();
@@ -579,7 +579,8 @@ init_thread (struct thread *t, const char *name, int priority)
       t->recent_cpu = (fp_int){0};
       t->nice = NICE_DEFAULT;
     }
-    t->priority = calculate_priority (t);
+    // t->priority = calculate_priority (t, NULL);
+    calculate_priority (t, NULL);
   } else {
     t->priority = priority;
   } 
@@ -716,102 +717,42 @@ uint32_t thread_stack_ofs = offsetof (struct thread, stack);
 
 /* --------------------- BSD Scheduler Functions ----------------------------- */
 
-//REMOVE
-// /* Adds a thread to the respective level in mlfq */
-// static void add_to_mlfq (struct thread *t) {
-//   if (t == idle_thread) {
-//     return;
-//   }
-//   list_push_back(&(mlfq[INDEX_FROM_PRIOR((t->priority))]), &t->elem);
-//   size_of_mlfq++;
-// }
-
-// /* Removes a thread from its level in mlfq */
-// static void remove_from_mlfq (struct thread *t) {
-//   ASSERT(!list_empty(&mlfq[t->priority]))
-//   list_remove(&t->elem);
-//   size_of_mlfq--;
-// }
-
-// /* Returns the priority of the highest non-empty level */
-// static int get_highest_prior_mlfq (void) {
-//   int i = 0;
-//   while (list_empty(&mlfq[i])) {
-//     i++;
-//   }
-//   return i;
-// }
-
-// /* Returns next thread to be scheduled from highest priority level in mlfq */
-// static struct thread *get_next_thread_mlfq (void) {
-//   if (size_of_mlfq == 0) {
-//     return idle_thread;
-//   }
-//   int index = get_highest_prior_mlfq();
-//   struct thread * thread = list_entry(list_pop_front(&mlfq[index]), struct thread, elem);
-//   size_of_mlfq--;
-//   return thread;
-// }
-
-// /* Checks thread is in correct priority level after recalculation */
-// static void check_and_change_priority_level (int prev_prior, struct thread *t) {
-//   if (prev_prior != t->priority) {
-//     printf("thread %s is being moved from %d to %d\n", t->name, prev_prior, t->priority);
-//     remove_from_mlfq(t);
-//     add_to_mlfq(t);
-//   }
-// }
-
 /* Calculates priority of thread based on niceness and CPU usage */
-static int calculate_priority (struct thread *t) 
+static void calculate_priority (struct thread *t, void *aux UNUSED) 
 {
+  int priority;
   if (t == initial_thread) {
-    return PRI_DEFAULT;
+    priority = PRI_DEFAULT;
+  } else {
+
+    int pri_max_min_double_nice = PRI_MAX - (t->nice * 2);
+    priority = convert_int_nearest(sub_fps(convert_fp(pri_max_min_double_nice), div_fps_int(t->recent_cpu, 4)));
+    if (priority < PRI_MIN) {
+      priority = PRI_MIN;
+    } else if (priority > PRI_MAX) {
+      priority = PRI_MAX;
+    }
   }
-  int pri_max_min_double_nice = PRI_MAX - (t->nice * 2);
-  int priority = convert_int_nearest(sub_fps(convert_fp(pri_max_min_double_nice), div_fps_int(t->recent_cpu, 4)));
-  if (priority < PRI_MIN) {
-    return PRI_MIN;
-  } else if (priority > PRI_MAX) {
-    return PRI_MAX;
-  }
-  return priority;
+  t->priority = priority;
 }
 
-// // REMOVE
-// /* Calculates priorities of all running threads */
-// static void calculate_priorities_all_threads () {
-//   struct list_elem *e;
-//   for (e = list_begin (&all_list); e != list_end (&all_list); e = list_next(e)){
-//     struct thread *curr = list_entry(e, struct thread, elem);
-//     if(curr == idle_thread){
-//       continue;
-//     }
-//     int old_prior = curr->priority;
-//     curr->priority = calculate_priority(curr);
-//     if(curr->status == THREAD_READY){
-//       check_and_change_priority_level(old_prior, curr);
-//     }
+// /* Recalculates the recent_cpu and priority of a thread */
+// static void calc_recent_cpu_and_prior (struct thread *t, void *aux UNUSED) 
+// {
+//   bool in_mlfq = false;
+//   if (t->status == THREAD_READY) {
+//     in_mlfq = true;
+//     list_remove (&t->elem);
+//   }
+//   calculate_recent_cpu (t, NULL);
+//   calculate_priority (t, NULL);
+//   if (in_mlfq) {
+//     list_insert_ordered(&ready_list, &t->elem, is_thread_lower_priority, NULL);
 //   }
 // }
 
-/* Recalculates the recent_cpu and priority of a thread */
-static void calc_recent_cpu_and_prior (struct thread *t, void *aux UNUSED) 
-{
-  bool in_mlfq = false;
-  if (t->status == THREAD_READY) {
-    in_mlfq = true;
-    list_remove (&t->elem);
-  }
-  calculate_recent_cpu (t);
-  calculate_priority(t);
-  if (in_mlfq) {
-    list_insert_ordered(&ready_list, &t->elem, is_thread_lower_priority, NULL);
-  }
-}
-
-/* Calculates CPU usesage of thread */
-static void calculate_recent_cpu(struct thread *t)
+/* Calculates CPU usage of thread */
+static void calculate_recent_cpu(struct thread *t, void *aux UNUSED)
 {
   fp_int double_load_avg = mult_fps_int(load_avg, 2);
   t->recent_cpu = add_fps_int(mult_fps(div_fps(double_load_avg, 
