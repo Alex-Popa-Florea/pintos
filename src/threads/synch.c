@@ -32,7 +32,7 @@
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 
-struct list priorities = LIST_INITIALIZER(priorities);
+struct list priorities = LIST_INITIALIZER (priorities);
 
 /* Initializes semaphore SEMA to VALUE.  A semaphore is a
    nonnegative integer along with two atomic operators for
@@ -92,13 +92,13 @@ sema_try_down (struct semaphore *sema)
   ASSERT (sema != NULL);
 
   old_level = intr_disable ();
-  if (sema->value > 0) 
-    {
-      sema->value--;
-      success = true; 
-    }
-  else
+  if (sema->value > 0) {
+    sema->value--;
+    success = true; 
+  } else {
     success = false;
+  }
+    
   intr_set_level (old_level);
 
   return success;
@@ -118,20 +118,21 @@ sema_up (struct semaphore *sema)
   old_level = intr_disable ();
 
   struct list_elem* highest_priority_thread = NULL;
-  // if (!thread_mlfqs) {
   if (!list_empty (&sema->waiters)) { 
-    highest_priority_thread = list_max (&sema->waiters, is_thread_lower_priority, NULL);
+    highest_priority_thread = list_max (&sema->waiters, &thread_priority_comparator, NULL);
     list_remove (highest_priority_thread);
     thread_unblock (list_entry (highest_priority_thread, struct thread, elem));
   }
+
   sema->value++;
   intr_set_level (old_level);
   if (highest_priority_thread) {
-    if (is_thread_lower_priority(&thread_current()->elem, highest_priority_thread, NULL)) {
-      if(!intr_context ()) {
-        thread_yield ();
-      } else {
+    bool is_thread_lower_priority = thread_priority_comparator (&thread_current ()->elem, highest_priority_thread, NULL);
+    if (is_thread_lower_priority) {
+      if (intr_context ()) {
         intr_yield_on_return ();
+      } else {
+        thread_yield ();
       }
     }
   }
@@ -200,23 +201,20 @@ lock_init (struct lock *lock)
 }
 
 
-/* Compute the donated priority in the chain caused by a thread trying to acquire a lock */
+/* Passes up donated priority in the chain caused by a thread trying to acquire a lock */
 static void
-compute_priorities (struct thread *thread) {
+percolate_priorities (struct thread *thread) {
   // If the thread needs a lock, recursively proceed down the lock chain
   if (thread->needed_lock) {
     int effective_priority = get_effective_priority (thread);
-    
-    // Give the thread holding the lock the donated priority if it is higher
-    if (thread->needed_lock->holder->donated_priority < effective_priority) {
-      thread->needed_lock->holder->donated_priority = effective_priority;
-    }
 
     // Make the lock store the priority of the waiting thread if it is higher
     if (thread->needed_lock->max_donated_priority_of_waiters < effective_priority) {
       thread->needed_lock->max_donated_priority_of_waiters = effective_priority;
+      thread->needed_lock->holder->donated_priority = effective_priority;
     }
-    compute_priorities (thread->needed_lock->holder);
+
+    percolate_priorities (thread->needed_lock->holder);
   }
 }
 
@@ -254,7 +252,7 @@ lock_acquire (struct lock *lock)
 
   if(!lock_try_acquire (lock)){
     thread_current ()->needed_lock = lock;
-    compute_priorities (thread_current ());
+    percolate_priorities (thread_current ());
     sema_down (&lock->semaphore);
     lock->holder = thread_current ();
     lock->max_donated_priority_of_waiters = get_max_priority_of_waiters (lock);
@@ -296,13 +294,13 @@ lock_release (struct lock *lock)
 {
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
+
   // The current thread no longer holds this lock
   list_remove (&lock->elem);
   lock->holder = NULL;
 
-  // Calculate the remaining donated priority held by the current thread
   int remaining_donated_priority = PRI_MIN;
-  // Loop through the remaining locks held by the current thread
+  // Iterate through the remaining locks held by the current thread to calculate its new effective priority
   struct list_elem *current_lock_elem = list_begin (&thread_current ()->held_locks);
   while (current_lock_elem != list_tail (&thread_current ()->held_locks)) {
     struct lock *current_lock = list_entry (current_lock_elem, struct lock, elem);
@@ -334,21 +332,24 @@ struct semaphore_elem
   struct semaphore semaphore;         /* This semaphore. */
 };
 
-bool 
-is_semaphore_lower_priority (const struct list_elem *a,
-                             const struct list_elem *b,
-                             void *aux UNUSED)
+
+static int
+extract_thread_priority (const struct list_elem *e) 
 {
-  struct semaphore s1 = list_entry (a, struct semaphore_elem, elem)->semaphore;
-  struct list_elem *elem1 = list_begin (&s1.waiters);
-  struct thread *thread1 = list_entry (elem1, struct thread, elem);
-  int effective_priority1 = get_effective_priority (thread1);
+  struct semaphore sema = list_entry (e, struct semaphore_elem, elem)->semaphore;
+  struct list_elem *elem = list_begin (&sema.waiters);
+  struct thread *thread = list_entry (elem, struct thread, elem);
+  return get_effective_priority (thread);
+}
 
-  struct semaphore s2 = list_entry (b, struct semaphore_elem, elem)->semaphore;
-  struct list_elem *elem2 = list_begin (&s2.waiters);
-  struct thread *thread2 = list_entry (elem2, struct thread, elem);
-  int effective_priority2 = get_effective_priority (thread2);
 
+bool 
+semaphore_priority_comparator (const struct list_elem *a,
+                               const struct list_elem *b,
+                               void *aux UNUSED)
+{
+  int effective_priority1 = extract_thread_priority (a);
+  int effective_priority2 = extract_thread_priority (b);
   return effective_priority1 < effective_priority2;
 }
 
@@ -416,8 +417,9 @@ cond_signal (struct condition *cond, struct lock *lock UNUSED)
   ASSERT (!intr_context ());
   ASSERT (lock_held_by_current_thread (lock));
 
+  // Remove the highest priority thread contained in one of the conditions
   if (!list_empty (&cond->waiters)) {
-    list_sort (&cond->waiters, is_semaphore_lower_priority, NULL);
+    list_sort (&cond->waiters, &semaphore_priority_comparator, NULL);
     sema_up (&list_entry (list_pop_back (&cond->waiters), struct semaphore_elem, elem)->semaphore);
   }
 }
