@@ -208,10 +208,12 @@ percolate_priorities (struct thread *thread) {
   if (thread->needed_lock) {
     int effective_priority = get_effective_priority (thread);
 
-    // Make the lock store the priority of the waiting thread if it is higher
+    if (thread->needed_lock->holder->donated_priority < effective_priority) {
+      thread->needed_lock->holder->donated_priority = effective_priority;
+    }
+
     if (thread->needed_lock->max_donated_priority_of_waiters < effective_priority) {
       thread->needed_lock->max_donated_priority_of_waiters = effective_priority;
-      thread->needed_lock->holder->donated_priority = effective_priority;
     }
 
     percolate_priorities (thread->needed_lock->holder);

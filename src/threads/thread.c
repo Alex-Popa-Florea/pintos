@@ -451,14 +451,13 @@ thread_set_nice (int new_nice)
 {
   ASSERT (NICE_MIN <= new_nice && new_nice <= NICE_MAX);
 
-  if (thread_current () != initial_thread) {
-    struct thread* cur = thread_current ();
-    cur->nice = new_nice;
-    calculate_priority (cur, NULL);
-
+  struct thread* cur = thread_current ();
+  cur->nice = new_nice;
+  calculate_priority (cur, NULL);
+  if (!list_empty (&ready_list)) {
     if (cur->priority < list_entry (list_back (&ready_list), struct thread, elem)->priority) {
-      thread_yield();
-    }
+      thread_yield ();
+    } 
   }
 }
 
@@ -720,16 +719,12 @@ static void
 calculate_priority (struct thread *t, void *aux UNUSED) 
 {
   int priority;
-  if (t == initial_thread) {
-    priority = PRI_DEFAULT;
-  } else {
-    int pri_max_min_double_nice = PRI_MAX - (t->nice * 2);
-    priority = convert_int_nearest (sub_fps (convert_fp (pri_max_min_double_nice), div_fps_int (t->recent_cpu, 4)));
-    if (priority < PRI_MIN) {
-      priority = PRI_MIN;
-    } else if (priority > PRI_MAX) {
-      priority = PRI_MAX;
-    }
+  int pri_max_min_double_nice = PRI_MAX - (t->nice * 2);
+  priority = convert_int_nearest (sub_fps (convert_fp (pri_max_min_double_nice), div_fps_int (t->recent_cpu, 4)));
+  if (priority < PRI_MIN) {
+    priority = PRI_MIN;
+  } else if (priority > PRI_MAX) {
+    priority = PRI_MAX;
   }
   t->priority = priority;
 }
