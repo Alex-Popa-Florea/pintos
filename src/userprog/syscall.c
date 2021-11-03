@@ -3,6 +3,7 @@
 #include <syscall-nr.h>
 #include "threads/interrupt.h"
 #include "threads/thread.h"
+#include "process.h"
 
 static void syscall_handler (struct intr_frame *);
 
@@ -15,6 +16,28 @@ syscall_init (void)
 static void
 syscall_handler (struct intr_frame *f UNUSED) 
 {
-  printf ("system call!\n");
+  int *addr = f->esp;
+  verify_address (addr);
+  int system_call = *addr;
+  printf ("Call: %d\n", system_call);
+
+  if (system_call == SYS_EXIT) {
+    exit (0);
+  } else {
+    print_termination_output ();
+    thread_exit ();
+  }
+  
+}
+
+void 
+exit (int status) {
+  set_process_status (thread_current (), status);
+  print_termination_output ();
   thread_exit ();
+}
+
+void 
+print_termination_output (void) {
+  printf ("%s:  exit(%d)\n", thread_current ()->name, thread_current ()->process_status);
 }

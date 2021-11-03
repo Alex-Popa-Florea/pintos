@@ -752,3 +752,9 @@ calculate_load_avg (void)
                   div_fps (convert_fp (num_of_threads), 
                            convert_fp (60)));
 }
+
+
+void 
+set_process_status (struct thread *thread, int status) {
+  thread->process_status = status;
+}

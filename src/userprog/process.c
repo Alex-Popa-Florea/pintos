@@ -40,6 +40,7 @@ process_execute (const char *file_name)
 
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
+  
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy); 
   return tid;
@@ -445,10 +446,10 @@ setup_stack (void **esp)
     {
       success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
       if (success)
-        *esp = PHYS_BASE;
+        *esp = PHYS_BASE - 12;
       else
         palloc_free_page (kpage);
-    }
+    } 
   return success;
 }
 
@@ -470,4 +471,13 @@ install_page (void *upage, void *kpage, bool writable)
      address, then map our page there. */
   return (pagedir_get_page (t->pagedir, upage) == NULL
           && pagedir_set_page (t->pagedir, upage, kpage, writable));
+}
+
+void verify_address (const void *vaddr) {
+  if (!is_user_vaddr (vaddr)) {
+    process_exit();
+  }
+  if (!pagedir_get_page(thread_current ()->pagedir, vaddr)) {
+    process_exit();
+  }
 }

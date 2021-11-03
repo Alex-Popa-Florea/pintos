@@ -3,9 +3,9 @@
 
 #include <debug.h>
 #include <list.h>
-//#include <stdint.h>
+#include <stdint.h>
 #include "threads/fixed-point.h"
-
+#define USERPROG 1
 /* States in a thread's life cycle. */
 enum thread_status
   {
@@ -88,6 +88,7 @@ struct thread
     enum thread_status status;          /* Thread state. */
     char name[16];                      /* Name (for debugging purposes). */
     uint8_t *stack;                     /* Saved stack pointer. */
+    //uint32_t *pagedir;
 
     int priority;                       /* Priority. */
     int donated_priority;               /* Highest priority donated by threads (in)directly waiting on its locks */
@@ -107,6 +108,8 @@ struct thread
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
+    int process_status;                 /* Status of the process which owns the thread. */
+    bool is_thread_user_process;        /* Marks if a thread belongs to the kernel or a user process. */
 #endif
 
     /* Owned by thread.c. */
@@ -157,4 +160,5 @@ void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
+void set_process_status (struct thread *thread, int status);
 #endif /* threads/thread.h */
