@@ -252,6 +252,8 @@ lock_acquire (struct lock *lock)
   ASSERT (!intr_context ());
   ASSERT (!lock_held_by_current_thread (lock));
 
+  enum intr_level old_level = intr_disable();
+
   if(!lock_try_acquire (lock)){
     thread_current ()->needed_lock = lock;
     percolate_priorities (thread_current ());
@@ -260,6 +262,7 @@ lock_acquire (struct lock *lock)
     lock->max_donated_priority_of_waiters = get_max_priority_of_waiters (lock);
     thread_current ()->needed_lock = NULL;
   }
+  intr_set_level (old_level);
 
   list_push_back (&thread_current ()->held_locks, &lock->elem);
 }
@@ -311,8 +314,10 @@ lock_release (struct lock *lock)
     }
     current_lock_elem = current_lock_elem->next;
   }
+  enum intr_level old_level = intr_disable();
   thread_current ()->donated_priority = remaining_donated_priority;
   sema_up (&lock->semaphore);
+  intr_set_level (old_level);
 }
 
 
