@@ -20,6 +20,7 @@
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
+static void tokeniser (const char *cmdline, char **args);
 
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
@@ -33,13 +34,21 @@ process_execute (const char *file_name)
 
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
-  fn_copy = palloc_get_page (0);
+  fn_copy = palloc_get_page (0); //allocates page of memory to thread - used as a place to store arguments
   if (fn_copy == NULL)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
 
+  //tokenise the filename here
+  char *str;
+  strlcpy (str, file_name, strlen(file_name) + 1);
+
+  char *newStrPointer;
+  char *arg1 = strtok_r(str, " ", &newStrPointer);
+
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
+  // tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
+  tid = thread_create (arg1, PRI_DEFAULT, start_process, fn_copy);
   
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy); 
@@ -55,12 +64,39 @@ start_process (void *file_name_)
   struct intr_frame if_;
   bool success;
 
+  //tokenise rest of the arguments?
+  char *token, *save_ptr;
+  char *str;
+  strlcpy (str, file_name, strlen(file_name) + 1);
+  int argv = 0;
+
+  for (token = strtok_r (str, " ", &save_ptr); token != NULL;
+        token = strtok_r (NULL, " ", &save_ptr))
+     argv++;
+  
+  char *args[argv];
+  char *str2;
+  strlcpy (str2, file_name, strlen(file_name) + 1);
+  int i;
+
+  for (
+    i = 0, token = strtok_r (str2, " ", &save_ptr); 
+    token != NULL;
+    token = strtok_r (NULL, " ", &save_ptr), i++)
+  {
+    args[i] = token;
+  }
+
+  file_name = args[0];
+
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
   success = load (file_name, &if_.eip, &if_.esp);
+
+  //initialise the stack with arguments? through if_.esp
 
   /* If load failed, quit. */
   palloc_free_page (file_name);
@@ -76,6 +112,8 @@ start_process (void *file_name_)
   asm volatile ("movl %0, %%esp; jmp intr_exit" : : "g" (&if_) : "memory");
   NOT_REACHED ();
 }
+
+/* Tokeniser for command line input */
 
 /* Waits for thread TID to die and returns its exit status. 
  * If it was terminated by the kernel (i.e. killed due to an exception), 
