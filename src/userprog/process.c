@@ -89,6 +89,7 @@ start_process (void *file_name_)
 int
 process_wait (tid_t child_tid UNUSED) 
 {
+  while (true) {}
   return -1;
 }
 
@@ -475,9 +476,9 @@ install_page (void *upage, void *kpage, bool writable)
 
 void verify_address (const void *vaddr) {
   if (!is_user_vaddr (vaddr)) {
-    process_exit();
+    exit (-1);
   }
   if (!pagedir_get_page(thread_current ()->pagedir, vaddr)) {
-    process_exit();
+    exit (-1);
   }
 }

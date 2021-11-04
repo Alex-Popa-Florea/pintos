@@ -1,6 +1,7 @@
 #include "userprog/syscall.h"
 #include <stdio.h>
 #include <syscall-nr.h>
+#include "../lib/kernel/console.c"
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 #include "process.h"
@@ -23,6 +24,8 @@ syscall_handler (struct intr_frame *f UNUSED)
 
   if (system_call == SYS_EXIT) {
     exit (0);
+  } else if (system_call == SYS_WRITE){
+    //write (1, )
   } else {
     print_termination_output ();
     thread_exit ();
@@ -35,6 +38,19 @@ exit (int status) {
   set_process_status (thread_current (), status);
   print_termination_output ();
   thread_exit ();
+}
+
+int 
+write (int fd, const void *buffer, unsigned size) {
+  if (fd == 1) {
+    int split_size = size;
+    while (split_size > 500) {
+      putbuf (buffer, 500);
+      split_size -= 500;
+    }
+    putbuf (buffer, split_size);    
+  }
+  return size;
 }
 
 void 

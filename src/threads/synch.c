@@ -254,7 +254,7 @@ lock_acquire (struct lock *lock)
 
   enum intr_level old_level = intr_disable();
 
-  if(!lock_try_acquire (lock)){
+  if (!lock_try_acquire (lock)){
     thread_current ()->needed_lock = lock;
     percolate_priorities (thread_current ());
     sema_down (&lock->semaphore);
