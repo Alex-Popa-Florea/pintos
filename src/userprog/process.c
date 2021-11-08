@@ -17,6 +17,7 @@
 #include "threads/palloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#include "lib/string.h"
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
@@ -97,6 +98,9 @@ start_process (void *file_name_)
   success = load (file_name, &if_.eip, &if_.esp);
 
   //initialise the stack with arguments? through if_.esp
+  // if_.esp = PHYS_BASE - 12
+
+  
 
   /* If load failed, quit. */
   palloc_free_page (file_name);
