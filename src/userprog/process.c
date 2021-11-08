@@ -21,7 +21,8 @@
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
-static void tokeniser (const char *cmdline, char **args);
+
+#define COMMAND_LINE_LIMIT (128)
 
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
@@ -40,9 +41,9 @@ process_execute (const char *file_name)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
 
-  //tokenise the filename here
-  char *str;
-  strlcpy (str, file_name, strlen(file_name) + 1);
+  int file_name_size = strlen(file_name) + 1;
+  char str[file_name_size];
+  strlcpy (str, file_name, file_name_size);
 
   char *newStrPointer;
   char *arg1 = strtok_r(str, " ", &newStrPointer);
@@ -65,30 +66,33 @@ start_process (void *file_name_)
   struct intr_frame if_;
   bool success;
 
-  //tokenise rest of the arguments?
   char *token, *save_ptr;
-  char *str;
-  strlcpy (str, file_name, strlen(file_name) + 1);
-  int argv = 0;
+  
+  int file_name_size = strlen(file_name) + 1;
+  char str[file_name_size];
+  strlcpy (str, file_name, file_name_size);
+  
+  /*
+    argv - array used to store command line arguments. 
+    Assuming the maxium number of arguments is COMMAND_LINE_LIMIT / 2
+      - each argument a character long separated by whitespace
+  */
+  char *argv[COMMAND_LINE_LIMIT / 2];
 
-  for (strtok_r (str, " ", &save_ptr); token != NULL;
-        strtok_r (NULL, " ", &save_ptr)) {
-    argv++;
+  /* 
+    argc - stores the number of command line arguments
+  */
+  int argc = 0; 
+
+  token = strtok_r (str, " ", &save_ptr);
+
+  while (token != NULL) {
+    token = strtok_r (NULL, " ", &save_ptr);
+    argv[argc] = token;
+    argc++;
   }
 
-  char *args[argv];
-  strlcpy (str, file_name, strlen(file_name) + 1);
-
-  int i = 0;
-
-  for (token = strtok_r (str, " ", &save_ptr); token != NULL;
-        token = strtok_r (NULL, " ", &save_ptr)) {
-    // strlcpy (args[i], token, strlen(token) + 1);
-    args[i] = token;
-    i++;
-  }
-
-  file_name = args[0];
+  file_name = argv[0];
 
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
@@ -97,47 +101,51 @@ start_process (void *file_name_)
   if_.eflags = FLAG_IF | FLAG_MBS;
   success = load (file_name, &if_.eip, &if_.esp);
 
-  int i;
-  //*(--if_.esp);
-  for (i = 0; i < argv; i++) {
-    //*(--if_.esp) = args[i];
-    //strlcpy (--if_.esp, args[argv - 1 - i], strlen(args[argv - 1 - i]) + 1);
-    if_.esp = if_.esp - sizeof (char) * (strlen (args[argv - 1 - i]) + 1);
-    strlcpy (if_.esp, args[argv - 1 - i], sizeof (char) * (strlen (args[argv - 1 - i]) + 1));
-  }
-
-  //memcpy (--if_.esp, NULL, sizeof (NULL));
-  if_.esp = if_.esp - 4;
-  *(int *)(if_.esp) = 0;
-  
-
-  for (i++; i < argv * 2 + 1; i++) {
-    //memcpy (--if_.esp, (if_.esp + argv + 1), sizeof(char **));
-    *(uint32_t **)(if_.esp) = if_.esp + argv + 1;
-    if_.esp = if_.esp - 4;
-    //*--if_.esp = if_.esp + 1 + argv;
-  }
-  
-  
-  //memcpy (--if_.esp, (if_.esp + 1), sizeof(char ***));
-  *(uintptr_t **)(if_.esp) = if_.esp + 4;
-
-  //memcpy (--if_.esp, argv, sizeof (int));
-  if_.esp = if_.esp - 4;
-  *(int *)(if_.esp) = argv;
-  //memcpy (--if_.esp, 0, sizeof (int));
-  if_.esp = if_.esp - 4;
-  *(int *)(if_.esp) = 0;
-
-  //initialise the stack with arguments? through if_.esp
-  // if_.esp = PHYS_BASE - 12
-
-  
-
   /* If load failed, quit. */
   palloc_free_page (file_name);
   if (!success) 
     thread_exit ();
+
+  
+  // Setting up the stack 
+
+  /*
+    Adding the parsed arguments to stack
+  */
+  char *argv_ptrs[argc];
+
+  for (int i = 0; i < argc; i++) {
+    if_.esp = if_.esp - sizeof (char) * (strlen (argv[argc - 1 - i]) + 1);
+    strlcpy (if_.esp, argv[argc - 1 - i], sizeof (char) * (strlen (argv[argc - 1 - i]) + 1));
+    argv_ptrs[i] = if_.esp;
+  }
+
+  // Adds word align buffer to the stack
+  uint8_t word_align = 0;
+  memcpy (if_.esp, &word_align, sizeof (uint8_t));
+  if_.esp = if_.esp - sizeof (uint8_t);
+  
+  // Adds null pointer sentinel to the stack
+  memcpy (if_.esp, NULL, sizeof (char *));
+  if_.esp = if_.esp - sizeof (char *);
+  
+  // Adds addresses of arguments to stack
+  for (int j = 0; j < argc; j++) {
+    memcpy (if_.esp, argv_ptrs[j], sizeof (char *));
+    if_.esp = if_.esp - sizeof (char *);
+  }
+  
+  // Adds pointer to the start of argument array to stack
+  char **argv_ptr = if_.esp + sizeof (char *);
+  memcpy (if_.esp, &argv_ptr, sizeof (char **));
+  if_.esp = if_.esp - sizeof (char **);
+
+  // Adds number of arguments to stack
+  memcpy (if_.esp, &argc, sizeof (int));
+  if_.esp = if_.esp - sizeof (int);
+  
+  // Adds return address to stack
+  memcpy (if_.esp, NULL, sizeof (NULL));
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
@@ -149,7 +157,6 @@ start_process (void *file_name_)
   NOT_REACHED ();
 }
 
-/* Tokeniser for command line input */
 
 /* Waits for thread TID to die and returns its exit status. 
  * If it was terminated by the kernel (i.e. killed due to an exception), 
