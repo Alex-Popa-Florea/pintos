@@ -71,21 +71,21 @@ start_process (void *file_name_)
   strlcpy (str, file_name, strlen(file_name) + 1);
   int argv = 0;
 
-  for (token = strtok_r (str, " ", &save_ptr); token != NULL;
-        token = strtok_r (NULL, " ", &save_ptr))
-     argv++;
-  
-  char *args[argv];
-  char *str2;
-  strlcpy (str2, file_name, strlen(file_name) + 1);
-  int i;
+  for (strtok_r (str, " ", &save_ptr); token != NULL;
+        strtok_r (NULL, " ", &save_ptr)) {
+    argv++;
+  }
 
-  for (
-    i = 0, token = strtok_r (str2, " ", &save_ptr); 
-    token != NULL;
-    token = strtok_r (NULL, " ", &save_ptr), i++)
-  {
+  char *args[argv];
+  strlcpy (str, file_name, strlen(file_name) + 1);
+
+  int i = 0;
+
+  for (token = strtok_r (str, " ", &save_ptr); token != NULL;
+        token = strtok_r (NULL, " ", &save_ptr)) {
+    // strlcpy (args[i], token, strlen(token) + 1);
     args[i] = token;
+    i++;
   }
 
   file_name = args[0];
@@ -96,6 +96,38 @@ start_process (void *file_name_)
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
   success = load (file_name, &if_.eip, &if_.esp);
+
+  int i;
+  //*(--if_.esp);
+  for (i = 0; i < argv; i++) {
+    //*(--if_.esp) = args[i];
+    //strlcpy (--if_.esp, args[argv - 1 - i], strlen(args[argv - 1 - i]) + 1);
+    if_.esp = if_.esp - sizeof (char) * (strlen (args[argv - 1 - i]) + 1);
+    strlcpy (if_.esp, args[argv - 1 - i], sizeof (char) * (strlen (args[argv - 1 - i]) + 1));
+  }
+
+  //memcpy (--if_.esp, NULL, sizeof (NULL));
+  if_.esp = if_.esp - 4;
+  *(int *)(if_.esp) = 0;
+  
+
+  for (i++; i < argv * 2 + 1; i++) {
+    //memcpy (--if_.esp, (if_.esp + argv + 1), sizeof(char **));
+    *(uint32_t **)(if_.esp) = if_.esp + argv + 1;
+    if_.esp = if_.esp - 4;
+    //*--if_.esp = if_.esp + 1 + argv;
+  }
+  
+  
+  //memcpy (--if_.esp, (if_.esp + 1), sizeof(char ***));
+  *(uintptr_t **)(if_.esp) = if_.esp + 4;
+
+  //memcpy (--if_.esp, argv, sizeof (int));
+  if_.esp = if_.esp - 4;
+  *(int *)(if_.esp) = argv;
+  //memcpy (--if_.esp, 0, sizeof (int));
+  if_.esp = if_.esp - 4;
+  *(int *)(if_.esp) = 0;
 
   //initialise the stack with arguments? through if_.esp
   // if_.esp = PHYS_BASE - 12
