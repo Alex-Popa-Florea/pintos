@@ -158,6 +158,41 @@ start_process (void *file_name_)
 }
 
 
+
+void init_pcb (pcb *pcb, pid_t process_id, pid_t parent_id) {
+  pcb->process_id = process_id;
+  pcb->parent_id = parent_id;
+  list_init (&pcb->children);
+  pcb->exit_status = 0;
+}
+
+
+bool process_has_child (struct list *children, pid_t child_id) {
+  struct list_elem *e;
+  for (e = list_begin (children); e != list_end (children); e = list_next (e)) {
+    if (list_entry (e, process_id_elem, elem)->process_id == child_id) {
+      return true;
+    }
+  }
+  return false;
+}
+
+struct list pcb_list = LIST_INITIALIZER (pcb_list);
+
+pcb *get_pcb_from_thread (tid_t tid) {
+  struct list_elem *e;
+  for (e = list_begin (&pcb_list); e != list_end (&pcb_list); e = list_next (e)) {
+    pcb *current_pcb = list_entry (e, pcb, elem);
+    if (current_pcb->thread_id == tid) {
+      return current_pcb;
+    }
+  }
+  return NULL;
+}
+
+
+
+
 /* Waits for thread TID to die and returns its exit status. 
  * If it was terminated by the kernel (i.e. killed due to an exception), 
  * returns -1.  
@@ -167,11 +202,28 @@ start_process (void *file_name_)
  * 
  * This function will be implemented in task 2.
  * For now, it does nothing. */
-int
-process_wait (tid_t child_tid UNUSED) 
+
+
+
+process_wait (tid_t child_tid) 
 {
-  while (true) {}
-  return -1;
+  struct thread *current_thread = thread_current ();
+  pcb *current_pcb = get_pcb_from_thread (current_thread->tid);
+
+  // The thread does not correspond to a child process of the current process
+  if (!process_has_child (&current_pcb->children, child_tid)) {
+    return -1;
+  }
+
+  pcb *child_pcb = get_pcb_from_thread (child_tid);
+  // Child process has already terminated
+  if (child_pcb->exit_status != PROCESS_UNTOUCHED_STATUS) {
+    return child_pcb->exit_status;
+  }
+
+  // Blocks the current process's thread
+  sema_down (&current_pcb->sema);
+  return child_pcb->exit_status;
 }
 
 /* Free the current process's resources. */

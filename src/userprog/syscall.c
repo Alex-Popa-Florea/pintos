@@ -54,7 +54,7 @@ write (int fd, const void *buffer, unsigned size) {
 }
 
 int wait (pid_t pid) {
-  process_wait(pid);
+  process_wait (pid);
 }
 
 void 

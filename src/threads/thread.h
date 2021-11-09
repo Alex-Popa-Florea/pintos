@@ -1,11 +1,12 @@
 #ifndef THREADS_THREAD_H
 #define THREADS_THREAD_H
 
+#define USERPROG
+
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
 #include "threads/fixed-point.h"
-#define USERPROG 1
 /* States in a thread's life cycle. */
 enum thread_status
   {
@@ -15,8 +16,7 @@ enum thread_status
     THREAD_DYING        /* About to be destroyed. */
   };
 
-/* Thread identifier type.
-   You can redefine this to whatever type you like. */
+/* Thread identifier type. */
 typedef int tid_t;
 #define TID_ERROR ((tid_t) -1)          /* Error value for tid_t. */
 
@@ -88,7 +88,6 @@ struct thread
     enum thread_status status;          /* Thread state. */
     char name[16];                      /* Name (for debugging purposes). */
     uint8_t *stack;                     /* Saved stack pointer. */
-    //uint32_t *pagedir;
 
     int priority;                       /* Priority. */
     int donated_priority;               /* Highest priority donated by threads (in)directly waiting on its locks */
@@ -108,10 +107,7 @@ struct thread
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
-    int process_status;                 /* Status of the process which owns the thread. */
-    bool is_thread_user_process;        /* Marks if a thread belongs to the kernel or a user process. */
 #endif
-
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
   };
