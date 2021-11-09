@@ -2,6 +2,7 @@
 #define USERPROG_PROCESS_H
 
 #define PROCESS_UNTOUCHED_STATUS (-10)
+#define CHILDLESS_PARENT_ID (-50)
 
 #include "lib/user/syscall.h"
 #include "threads/thread.h"
@@ -18,9 +19,8 @@ void verify_address (const void *vaddr);
     Struct for a process control block, storing a process and relevant info
 */
 typedef struct {  
-    pid_t process_id;
-    tid_t thread_id; // Id of the thread corresponding to the process
-    pid_t parent_id; // A parent_id of -1 means a process has no parent
+    int id; // Id of the thread which equals the id of the process
+    int parent_id; // A parent_id of -1 means a process has no parent
     struct list_elem elem;
     struct list children;
     int exit_status;
@@ -28,18 +28,18 @@ typedef struct {
 } pcb;
 
 /*
-    Struct wraps pid_t so a list of process ids can be created
+    Struct to wrap int to create a list of ids
 */
 typedef struct {
-    pid_t process_id;
+    int id;
     struct list_elem elem;
-} process_id_elem;
+} id_elem;
 
 
 /*
     Initialises a PCB with a process having no children
 */
-void init_pcb (pcb *, pid_t, pid_t);
+void init_pcb (pcb *, int, int);
 
 /*
     Returns true if the process contains the child in its list of children

@@ -24,6 +24,8 @@ static bool load (const char *cmdline, void (**eip) (void), void **esp);
 
 #define COMMAND_LINE_LIMIT (128)
 
+struct list pcb_list = LIST_INITIALIZER (pcb_list);
+
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
    before process_execute() returns.  Returns the new process's
@@ -177,7 +179,6 @@ bool process_has_child (struct list *children, pid_t child_id) {
   return false;
 }
 
-struct list pcb_list = LIST_INITIALIZER (pcb_list);
 
 pcb *get_pcb_from_thread (tid_t tid) {
   struct list_elem *e;

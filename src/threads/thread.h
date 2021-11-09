@@ -107,6 +107,7 @@ struct thread
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
+    int process_status;                 /* Status for the process thread is contained in */
 #endif
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
