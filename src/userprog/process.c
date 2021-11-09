@@ -220,7 +220,7 @@ process_wait (tid_t child_tid)
   if (child_pcb->hasWaited) {
     return -1;
   }
-  
+
   // Child process has already terminated
   if (child_pcb->exit_status != PROCESS_UNTOUCHED_STATUS) {
     return child_pcb->exit_status;
@@ -228,7 +228,7 @@ process_wait (tid_t child_tid)
 
   // Blocks the current process's thread
   sema_down (&current_pcb->sema);
-
+  child_pcb->hasWaited = true;
   return child_pcb->exit_status;
 }
 
