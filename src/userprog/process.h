@@ -9,4 +9,12 @@ void process_exit (void);
 void process_activate (void);
 void verify_address (const void *vaddr);
 
+// Struct for a process control block, storing a process and relevant info
+typedef struct {  
+    pid_t process_id;
+    struct list_elem elem;
+    struct list children;
+    int exit_status;
+} pcb;
+
 #endif /* userprog/process.h */
