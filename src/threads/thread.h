@@ -110,6 +110,9 @@ struct thread
     uint32_t *pagedir;                  /* Page directory. */
     int process_status;                 /* Status of the process which owns the thread. */
     bool is_thread_user_process;        /* Marks if a thread belongs to the kernel or a user process. */
+
+    int current_file_descriptor;        /* Stores the file descriptor of the last file opened, used giving files fds. */  
+    struct list file_list;              /* Stores the list of files opened by the thread. */
 #endif
 
     /* Owned by thread.c. */

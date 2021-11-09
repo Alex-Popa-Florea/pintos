@@ -85,15 +85,14 @@ start_process (void *file_name_)
   int argc = 0; 
 
   token = strtok_r (str, " ", &save_ptr);
+  file_name = token;
 
   while (token != NULL) {
     token = strtok_r (NULL, " ", &save_ptr);
     argv[argc] = token;
     argc++;
-  }
-
-  file_name = argv[0];
-
+  } 
+  
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
@@ -555,11 +554,3 @@ install_page (void *upage, void *kpage, bool writable)
           && pagedir_set_page (t->pagedir, upage, kpage, writable));
 }
 
-void verify_address (const void *vaddr) {
-  if (!is_user_vaddr (vaddr)) {
-    exit (-1);
-  }
-  if (!pagedir_get_page(thread_current ()->pagedir, vaddr)) {
-    exit (-1);
-  }
-}
