@@ -56,6 +56,9 @@ process_execute (const char *file_name)
   
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy); 
+  
+  pcb current_pcb;
+  init_pcb (&current_pcb, tid, CHILDLESS_PARENT_ID);
   return tid;
 }
 
@@ -161,18 +164,20 @@ start_process (void *file_name_)
 
 
 
-void init_pcb (pcb *pcb, pid_t process_id, pid_t parent_id) {
-  pcb->process_id = process_id;
+void init_pcb (pcb *pcb, int id, int parent_id) {
+  pcb->id = id;
   pcb->parent_id = parent_id;
   list_init (&pcb->children);
   pcb->exit_status = 0;
+  sema_init (&pcb->sema, 0);
+  pcb->hasWaited = false;
 }
 
 
 bool process_has_child (struct list *children, pid_t child_id) {
   struct list_elem *e;
   for (e = list_begin (children); e != list_end (children); e = list_next (e)) {
-    if (list_entry (e, process_id_elem, elem)->process_id == child_id) {
+    if (list_entry (e, id_elem, elem)->id == child_id) {
       return true;
     }
   }
@@ -184,14 +189,12 @@ pcb *get_pcb_from_thread (tid_t tid) {
   struct list_elem *e;
   for (e = list_begin (&pcb_list); e != list_end (&pcb_list); e = list_next (e)) {
     pcb *current_pcb = list_entry (e, pcb, elem);
-    if (current_pcb->thread_id == tid) {
+    if (current_pcb->id == tid) {
       return current_pcb;
     }
   }
   return NULL;
 }
-
-
 
 
 /* Waits for thread TID to die and returns its exit status. 
@@ -203,9 +206,6 @@ pcb *get_pcb_from_thread (tid_t tid) {
  * 
  * This function will be implemented in task 2.
  * For now, it does nothing. */
-
-
-
 process_wait (tid_t child_tid) 
 {
   struct thread *current_thread = thread_current ();
@@ -217,6 +217,10 @@ process_wait (tid_t child_tid)
   }
 
   pcb *child_pcb = get_pcb_from_thread (child_tid);
+  if (child_pcb->hasWaited) {
+    return -1;
+  }
+  
   // Child process has already terminated
   if (child_pcb->exit_status != PROCESS_UNTOUCHED_STATUS) {
     return child_pcb->exit_status;
@@ -224,14 +228,18 @@ process_wait (tid_t child_tid)
 
   // Blocks the current process's thread
   sema_down (&current_pcb->sema);
+
   return child_pcb->exit_status;
 }
+
 
 /* Free the current process's resources. */
 void
 process_exit (void)
 {
   struct thread *cur = thread_current ();
+  pcb *current_pcb = get_pcb_from_thread (cur->tid);
+  current_pcb->exit_status = cur->process_status;
   uint32_t *pd;
 
   /* Destroy the current process's page directory and switch back
@@ -250,6 +258,9 @@ process_exit (void)
       pagedir_activate (NULL);
       pagedir_destroy (pd);
     }
+  
+  pcb *parent_pcb = get_pcb_from_thread (current_pcb->parent_id);
+  sema_up (&parent_pcb->sema);
 }
 
 /* Sets up the CPU for running user code in the current

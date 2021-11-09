@@ -25,6 +25,7 @@ typedef struct {
     struct list children;
     int exit_status;
     struct semaphore sema; // Semaphore used to block the thread of the corresponding process
+    bool hasWaited; // Boolean to track if a wait has already been called on the process
 } pcb;
 
 /*
