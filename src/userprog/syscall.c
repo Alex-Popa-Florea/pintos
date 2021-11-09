@@ -1,7 +1,7 @@
 #include "userprog/syscall.h"
 #include <stdio.h>
 #include <syscall-nr.h>
-#include "../lib/kernel/console.c"
+#include "lib/kernel/console.h"
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 #include "process.h"
