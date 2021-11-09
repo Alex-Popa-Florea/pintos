@@ -53,6 +53,10 @@ write (int fd, const void *buffer, unsigned size) {
   return size;
 }
 
+int wait (pid_t pid) {
+  process_wait(pid);
+}
+
 void 
 print_termination_output (void) {
   printf ("%s:  exit(%d)\n", thread_current ()->name, thread_current ()->process_status);
