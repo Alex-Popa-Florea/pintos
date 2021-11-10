@@ -68,16 +68,16 @@ process_execute (const char *file_name)
 static void
 start_process (void *file_name_)
 {
-  char *file_name = file_name_;
+  char *whole_file = file_name_;
   struct intr_frame if_;
   bool success;
 
   char *token, *save_ptr;
-  printf("Filename file_name (start_process)? : %s\n", file_name);
+  printf("Filename file_name (start_process)? : %s\n", whole_file);
   
-  int file_name_size = strlen(file_name) + 1;
+  int file_name_size = strlen(whole_file) + 1;
   char str[file_name_size];
-  strlcpy (str, file_name, file_name_size);
+  strlcpy (str, whole_file, file_name_size);
   printf("Filename str (start_process)? : %s\n", str);
   
   /*
@@ -93,7 +93,7 @@ start_process (void *file_name_)
   int argc = 0; 
 
   token = strtok_r (str, " ", &save_ptr);
-  file_name = token;
+  char *file_name = token;
   printf("Filename file_name1 (start_process)? : %s\n", file_name);
 
   while (token != NULL) {
@@ -112,7 +112,7 @@ start_process (void *file_name_)
   success = load (file_name, &if_.eip, &if_.esp);
 
   printf("Filename file_name2 (start_process)? : %s\n", file_name);
-  palloc_free_page (file_name);
+  palloc_free_page (whole_file);
   /* If load failed, quit. */
   if (!success) 
     thread_exit ();
@@ -132,33 +132,42 @@ start_process (void *file_name_)
   }
 
   // Adds word align buffer to the stack
+  if_.esp = if_.esp - sizeof (uint8_t);
   uint8_t word_align = 0;
   memcpy (if_.esp, &word_align, sizeof (uint8_t));
-  if_.esp = if_.esp - sizeof (uint8_t);
+  
   
   // Adds null pointer sentinel to the stack
-  memcpy (if_.esp, NULL, sizeof (char *));
   if_.esp = if_.esp - sizeof (char *);
+  //void *null = NULL;
+  (*(int *)(if_.esp)) = 0; // memcpy does work ?
+  //memcpy (if_.esp, &null, sizeof (char *));
+  
   
   // Adds addresses of arguments to stack
   for (int j = 0; j < argc; j++) {
-    memcpy (if_.esp, argv_ptrs[j], sizeof (char *));
     if_.esp = if_.esp - sizeof (char *);
+    memcpy (if_.esp, argv_ptrs[j], sizeof (char *));
+    
   }
   
   // Adds pointer to the start of argument array to stack
-  char **argv_ptr = if_.esp + sizeof (char *);
-  memcpy (if_.esp, &argv_ptr, sizeof (char **));
   if_.esp = if_.esp - sizeof (char **);
+  char **argv_ptr = if_.esp + sizeof (char **);
+  memcpy (if_.esp, &argv_ptr, sizeof (char **));
+  
 
   // Adds number of arguments to stack
-  memcpy (if_.esp, &argc, sizeof (int));
   if_.esp = if_.esp - sizeof (int);
+  memcpy (if_.esp, &argc, sizeof (int));
+  
   
   // Adds return address to stack
-  memcpy (if_.esp, NULL, sizeof (NULL));
+  if_.esp = if_.esp - sizeof (int);
+  (*(int *)(if_.esp)) = 0;  // memcpy does work ?
+  //memcpy (if_.esp, &null, sizeof (void *));
 
-  // hex_dump(if_.esp, if_.esp, PHYS_BASE - if_.esp, 0);
+  hex_dump(*(int *)(if_.esp), if_.esp, PHYS_BASE - if_.esp, 0);
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
