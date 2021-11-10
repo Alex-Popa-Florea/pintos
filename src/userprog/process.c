@@ -221,6 +221,9 @@ pcb *get_pcb_from_id (tid_t tid) {
 process_wait (tid_t child_tid) 
 {
   struct thread *current_thread = thread_current ();
+
+  enum intr_level old_level = intr_disable ();
+
   pcb *current_pcb = get_pcb_from_id (current_thread->tid);
 
   // The thread does not correspond to a child process of the current process
@@ -232,6 +235,8 @@ process_wait (tid_t child_tid)
   if (child_pcb->hasWaited) {
     return -1;
   }
+
+  intr_set_level (old_level);
 
   // Child process has already terminated
   if (child_pcb->exit_status != PROCESS_UNTOUCHED_STATUS) {
@@ -250,7 +255,7 @@ void
 process_exit (void)
 {
   struct thread *cur = thread_current ();
-  pcb *current_pcb = get_pcb_from_id(cur->tid);
+  pcb *current_pcb = get_pcb_from_id  (cur->tid);
   current_pcb->exit_status = cur->process_status;
   uint32_t *pd;
 
@@ -272,7 +277,16 @@ process_exit (void)
     }
   
   pcb *parent_pcb = get_pcb_from_id (current_pcb->parent_id);
-  sema_up (&parent_pcb->sema);
+  
+  if (parent_pcb == NULL) {
+    // The parent process has already terminated
+    list_remove (current_pcb);
+  }  else {
+    // The parent process still exists
+    sema_up (&parent_pcb->sema);
+  }
+  
+  
 }
 
 /* Sets up the CPU for running user code in the current
