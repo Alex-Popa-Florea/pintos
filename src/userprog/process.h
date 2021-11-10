@@ -38,7 +38,7 @@ typedef struct {
 
 
 /*
-    Initialises a PCB with a process having no children
+    Initialises a PCB with its id and parent id
 */
 void init_pcb (pcb *, int, int);
 
@@ -48,9 +48,9 @@ void init_pcb (pcb *, int, int);
 bool process_has_child (struct list *, pid_t);
 
 /*
-    Returns the PCB corresponding to a thread, NULL if there is no match
+    Returns the PCB corresponding to an id, NULL if there is no match
 */
-pcb *get_pcb_from_thread (tid_t);
+pcb *get_pcb_from_id (tid_t);
 
 
 #endif /* userprog/process.h */

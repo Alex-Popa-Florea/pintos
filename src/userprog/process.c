@@ -26,6 +26,7 @@ static bool load (const char *cmdline, void (**eip) (void), void **esp);
 
 struct list pcb_list = LIST_INITIALIZER (pcb_list);
 
+
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
    before process_execute() returns.  Returns the new process's
@@ -54,11 +55,22 @@ process_execute (const char *file_name)
   // tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
   tid = thread_create (arg1, PRI_DEFAULT, start_process, fn_copy);
   
-  if (tid == TID_ERROR)
+  if (tid == TID_ERROR) 
     palloc_free_page (fn_copy); 
   
-  pcb current_pcb;
-  init_pcb (&current_pcb, tid, CHILDLESS_PARENT_ID);
+
+  // Make the new process a child of the current process
+  pcb *parent_pcb = get_pcb_from_id (thread_current ()->tid);
+  id_elem child_id_elem = {.id = tid};
+  list_insert (&child_id_elem.elem, &parent_pcb->children);
+
+  // Initialise a PCB for the new process thread
+  pcb new_pcb;
+  init_pcb (&new_pcb, tid, parent_pcb->id);
+
+  // Add PCB to the list of all active PCBs
+  list_insert (&new_pcb.elem, &pcb_list);
+  
   return tid;
 }
 
@@ -185,7 +197,7 @@ bool process_has_child (struct list *children, pid_t child_id) {
 }
 
 
-pcb *get_pcb_from_thread (tid_t tid) {
+pcb *get_pcb_from_id (tid_t tid) {
   struct list_elem *e;
   for (e = list_begin (&pcb_list); e != list_end (&pcb_list); e = list_next (e)) {
     pcb *current_pcb = list_entry (e, pcb, elem);
@@ -209,14 +221,14 @@ pcb *get_pcb_from_thread (tid_t tid) {
 process_wait (tid_t child_tid) 
 {
   struct thread *current_thread = thread_current ();
-  pcb *current_pcb = get_pcb_from_thread (current_thread->tid);
+  pcb *current_pcb = get_pcb_from_id (current_thread->tid);
 
   // The thread does not correspond to a child process of the current process
   if (!process_has_child (&current_pcb->children, child_tid)) {
     return -1;
   }
 
-  pcb *child_pcb = get_pcb_from_thread (child_tid);
+  pcb *child_pcb = get_pcb_from_id (child_tid);
   if (child_pcb->hasWaited) {
     return -1;
   }
@@ -238,7 +250,7 @@ void
 process_exit (void)
 {
   struct thread *cur = thread_current ();
-  pcb *current_pcb = get_pcb_from_thread (cur->tid);
+  pcb *current_pcb = get_pcb_from_id(cur->tid);
   current_pcb->exit_status = cur->process_status;
   uint32_t *pd;
 
@@ -259,7 +271,7 @@ process_exit (void)
       pagedir_destroy (pd);
     }
   
-  pcb *parent_pcb = get_pcb_from_thread (current_pcb->parent_id);
+  pcb *parent_pcb = get_pcb_from_id (current_pcb->parent_id);
   sema_up (&parent_pcb->sema);
 }
 
