@@ -62,14 +62,14 @@ process_execute (const char *file_name)
   // Make the new process a child of the current process
   pcb *parent_pcb = get_pcb_from_id (thread_current ()->tid);
   id_elem child_id_elem = {.id = tid};
-  list_insert (&child_id_elem.elem, &parent_pcb->children);
+  list_push_back (&parent_pcb->children, &child_id_elem.elem);
 
   // Initialise a PCB for the new process thread
   pcb new_pcb;
   init_pcb (&new_pcb, tid, parent_pcb->id);
 
   // Add PCB to the list of all active PCBs
-  list_insert (&new_pcb.elem, &pcb_list);
+  list_push_back (&pcb_list, &new_pcb.elem);
   
   return tid;
 }
@@ -218,6 +218,7 @@ pcb *get_pcb_from_id (tid_t tid) {
  * 
  * This function will be implemented in task 2.
  * For now, it does nothing. */
+int
 process_wait (tid_t child_tid) 
 {
   struct thread *current_thread = thread_current ();
@@ -280,7 +281,7 @@ process_exit (void)
   
   if (parent_pcb == NULL) {
     // The parent process has already terminated
-    list_remove (current_pcb);
+    list_remove (&current_pcb->elem);
   }  else {
     // The parent process still exists
     sema_up (&parent_pcb->sema);
