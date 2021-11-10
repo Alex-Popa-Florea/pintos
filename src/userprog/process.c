@@ -42,16 +42,13 @@ process_execute (const char *file_name)
   if (fn_copy == NULL)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
-  printf("Filename fn_copy? : %s\n", fn_copy);
 
   int file_name_size = strlen(file_name) + 1;
   char str[file_name_size];
   strlcpy (str, file_name, file_name_size);
-  printf("Filename str? : %s\n", str);
 
   char *newStrPointer;
   char *arg1 = strtok_r(str, " ", &newStrPointer);
-  printf("Filename? arg1: %s\n", arg1);
 
   /* Create a new thread to execute FILE_NAME. */
   // tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
@@ -73,12 +70,10 @@ start_process (void *file_name_)
   bool success;
 
   char *token, *save_ptr;
-  printf("Filename file_name (start_process)? : %s\n", whole_file);
   
   int file_name_size = strlen(whole_file) + 1;
   char str[file_name_size];
   strlcpy (str, whole_file, file_name_size);
-  printf("Filename str (start_process)? : %s\n", str);
   
   /*
     argv - array used to store command line arguments. 
@@ -92,17 +87,18 @@ start_process (void *file_name_)
   */
   int argc = 0; 
 
-  token = strtok_r (str, " ", &save_ptr);
+  // argts-single onearg
+  token = strtok_r (str, " ", &save_ptr);  //token = args-single
   char *file_name = token;
-  printf("Filename file_name1 (start_process)? : %s\n", file_name);
 
   while (token != NULL) {
-    token = strtok_r (NULL, " ", &save_ptr);
-    argv[argc] = token;
-    argc++;
+    printf("Filename token (start_process)? : %s\n", token);
+    argv[argc] = token; // argv[1] = onearg
+    argc++;  //argc = 2
+    token = strtok_r (NULL, " ", &save_ptr); // token = null
   }
 
-  // file_name = argv[0];
+  //argv = ["args-single", "onearg"]
 
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
@@ -111,7 +107,6 @@ start_process (void *file_name_)
   if_.eflags = FLAG_IF | FLAG_MBS;
   success = load (file_name, &if_.eip, &if_.esp);
 
-  printf("Filename file_name2 (start_process)? : %s\n", file_name);
   palloc_free_page (whole_file);
   /* If load failed, quit. */
   if (!success) 
@@ -126,6 +121,7 @@ start_process (void *file_name_)
   char *argv_ptrs[argc];
 
   for (int i = argc - 1; i > 0; i--) {
+    printf("Filename arg (start_process)? : %s\n", argv[i]);
     if_.esp = if_.esp - sizeof (char) * (strlen (argv[i]) + 1);
     strlcpy (if_.esp, argv[i], sizeof (char) * (strlen (argv[i]) + 1));
     argv_ptrs[i] = if_.esp;
@@ -148,7 +144,7 @@ start_process (void *file_name_)
   for (int j = 0; j < argc; j++) {
     if_.esp = if_.esp - sizeof (char *);
     memcpy (if_.esp, argv_ptrs[j], sizeof (char *));
-    
+    printf("Filename arg (start_process)? : %s\n", argv_ptrs[j]);
   }
   
   // Adds pointer to the start of argument array to stack
@@ -167,7 +163,7 @@ start_process (void *file_name_)
   (*(int *)(if_.esp)) = 0;  // memcpy does work ?
   //memcpy (if_.esp, &null, sizeof (void *));
 
-  hex_dump(*(int *)(if_.esp), if_.esp, PHYS_BASE - if_.esp, 0);
+  hex_dump(*(uintptr_t *)(if_.esp), if_.esp, PHYS_BASE - if_.esp, 0);
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
