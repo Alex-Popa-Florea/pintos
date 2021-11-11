@@ -25,6 +25,9 @@ static bool load (const char *cmdline, void (**eip) (void), void **esp);
 
 #define COMMAND_LINE_LIMIT (128)
 
+struct list pcb_list = LIST_INITIALIZER (pcb_list);
+
+
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
    before process_execute() returns.  Returns the new process's
@@ -53,8 +56,22 @@ process_execute (const char *file_name)
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (arg1, PRI_DEFAULT, start_process, fn_copy);
   
-  if (tid == TID_ERROR)
+  if (tid == TID_ERROR) 
     palloc_free_page (fn_copy); 
+  
+
+  // Make the new process a child of the current process
+  pcb *parent_pcb = get_pcb_from_id (thread_current ()->tid);
+  id_elem child_id_elem = {.id = tid};
+  list_push_back (&parent_pcb->children, &child_id_elem.elem);
+
+  // Initialise a PCB for the new process thread
+  pcb new_pcb;
+  init_pcb (&new_pcb, tid, parent_pcb->id);
+
+  // Add PCB to the list of all active PCBs
+  list_push_back (&pcb_list, &new_pcb.elem);
+  
   return tid;
 }
 
@@ -165,6 +182,40 @@ start_process (void *file_name_)
 }
 
 
+
+void init_pcb (pcb *pcb, int id, int parent_id) {
+  pcb->id = id;
+  pcb->parent_id = parent_id;
+  list_init (&pcb->children);
+  pcb->exit_status = 0;
+  sema_init (&pcb->sema, 0);
+  pcb->hasWaited = false;
+}
+
+
+bool process_has_child (struct list *children, pid_t child_id) {
+  struct list_elem *e;
+  for (e = list_begin (children); e != list_end (children); e = list_next (e)) {
+    if (list_entry (e, id_elem, elem)->id == child_id) {
+      return true;
+    }
+  }
+  return false;
+}
+
+
+pcb *get_pcb_from_id (tid_t tid) {
+  struct list_elem *e;
+  for (e = list_begin (&pcb_list); e != list_end (&pcb_list); e = list_next (e)) {
+    pcb *current_pcb = list_entry (e, pcb, elem);
+    if (current_pcb->id == tid) {
+      return current_pcb;
+    }
+  }
+  return NULL;
+}
+
+
 /* Waits for thread TID to die and returns its exit status. 
  * If it was terminated by the kernel (i.e. killed due to an exception), 
  * returns -1.  
@@ -175,17 +226,45 @@ start_process (void *file_name_)
  * This function will be implemented in task 2.
  * For now, it does nothing. */
 int
-process_wait (tid_t child_tid UNUSED) 
+process_wait (tid_t child_tid) 
 {
-  while (true) {}
-  return -1;
+  struct thread *current_thread = thread_current ();
+
+  enum intr_level old_level = intr_disable ();
+
+  pcb *current_pcb = get_pcb_from_id (current_thread->tid);
+
+  // The thread does not correspond to a child process of the current process
+  if (!process_has_child (&current_pcb->children, child_tid)) {
+    return -1;
+  }
+
+  pcb *child_pcb = get_pcb_from_id (child_tid);
+  if (child_pcb->hasWaited) {
+    return -1;
+  }
+
+  intr_set_level (old_level);
+
+  // Child process has already terminated
+  if (child_pcb->exit_status != PROCESS_UNTOUCHED_STATUS) {
+    return child_pcb->exit_status;
+  }
+
+  // Blocks the current process's thread
+  sema_down (&current_pcb->sema);
+  child_pcb->hasWaited = true;
+  return child_pcb->exit_status;
 }
+
 
 /* Free the current process's resources. */
 void
 process_exit (void)
 {
   struct thread *cur = thread_current ();
+  pcb *current_pcb = get_pcb_from_id  (cur->tid);
+  current_pcb->exit_status = cur->process_status;
   uint32_t *pd;
 
   /* Destroy the current process's page directory and switch back
@@ -204,6 +283,18 @@ process_exit (void)
       pagedir_activate (NULL);
       pagedir_destroy (pd);
     }
+  
+  pcb *parent_pcb = get_pcb_from_id (current_pcb->parent_id);
+  
+  if (parent_pcb == NULL) {
+    // The parent process has already terminated
+    list_remove (&current_pcb->elem);
+  }  else {
+    // The parent process still exists
+    sema_up (&parent_pcb->sema);
+  }
+  
+  
 }
 
 /* Sets up the CPU for running user code in the current

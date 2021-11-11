@@ -5,6 +5,7 @@
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 #include "process.h"
+#include "devices/shutdown.h"
 
 static void syscall_handler (struct intr_frame *);
 
@@ -51,6 +52,14 @@ write (int fd, const void *buffer, unsigned size) {
     putbuf (buffer, split_size);    
   }
   return size;
+}
+
+int wait (pid_t pid) {
+  return process_wait (pid);
+}
+
+void halt (void) {
+  shutdown_power_off ();
 }
 
 void 
