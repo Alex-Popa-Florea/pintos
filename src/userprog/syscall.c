@@ -12,6 +12,7 @@
 #include "threads/vaddr.h"
 #include "userprog/pagedir.h"
 #include "threads/synch.h"
+#include "lib/user/syscall.h"
 
 static void syscall_handler (struct intr_frame *);
 struct lock file_system_lock;
@@ -19,6 +20,7 @@ struct lock file_system_lock;
 void
 syscall_init (void) 
 {
+  lock_init (&file_system_lock);
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
 }
 
@@ -29,8 +31,8 @@ syscall_handler (struct intr_frame *f UNUSED)
   verify_address (addr);
   int system_call = *addr;
   printf ("Call: %d\n", system_call);
+
   
-  lock_init (&file_system_lock);
 
   if (system_call == SYS_EXIT) {
     exit (0);
@@ -55,8 +57,24 @@ exit (int status) {
   thread_exit ();
 }
 
+pid_t 
+exec (const char *cmd_line) {
+  if (!cmd_line) {
+    return -1;
+  }
+  lock_acquire (&file_system_lock);
+
+  pid_t new_process_pid = process_execute (cmd_line);
+
+  lock_release (&file_system_lock);
+
+  return new_process_pid;
+
+}
+
 bool 
 create (const char *file, unsigned initial_size) {
+
   lock_acquire (&file_system_lock);
   bool success = filesys_create (file, initial_size);
   lock_release (&file_system_lock);
@@ -65,14 +83,19 @@ create (const char *file, unsigned initial_size) {
 
 bool
 remove (const char *file) {
+
   lock_acquire (&file_system_lock);
+
   bool success = filesys_remove (file);
+
   lock_release (&file_system_lock);
+
   return success;
 }
 
 int 
 open (const char *file) {
+
   lock_acquire (&file_system_lock);
 
   struct file *new_file = filesys_open (file);
@@ -161,6 +184,53 @@ write (int fd, const void *buffer, unsigned size) {
   lock_release (&file_system_lock);
 
   return bytes_written;
+}
+
+void 
+seek (int fd, unsigned position) {
+
+  lock_acquire (&file_system_lock);
+
+  struct process_file *process_file = file_finder (fd);
+  if (process_file) {
+    file_seek (process_file->file, position);
+  }
+
+  lock_release (&file_system_lock);
+
+}
+
+unsigned 
+tell (int fd) {
+
+  lock_acquire (&file_system_lock);
+
+  int position = 0;
+
+  struct process_file *process_file = file_finder (fd);
+  if (process_file) {
+    position = file_tell (process_file->file);
+  }
+
+  lock_release (&file_system_lock);
+
+  return position;
+}
+
+void 
+close (int fd) {
+
+  lock_acquire (&file_system_lock);
+
+  struct process_file *process_file = file_finder (fd);
+  if (process_file) {
+    file_close (process_file->file);
+    list_remove (&process_file->file_elem);
+  }
+
+  lock_release (&file_system_lock);
+
+  return;
 }
 
 struct process_file *
