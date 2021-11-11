@@ -59,19 +59,24 @@ process_execute (const char *file_name)
   if (tid == TID_ERROR) 
     palloc_free_page (fn_copy); 
   
-
+  enum intr_level old_level = intr_disable ();
   // Make the new process a child of the current process
   pcb *parent_pcb = get_pcb_from_id (thread_current ()->tid);
-  id_elem child_id_elem = {.id = tid};
-  list_push_back (&parent_pcb->children, &child_id_elem.elem);
-
-  // Initialise a PCB for the new process thread
   pcb new_pcb;
-  init_pcb (&new_pcb, tid, parent_pcb->id);
+
+  if (parent_pcb != NULL) {
+    id_elem child_id_elem = {.id = tid};
+    list_push_back (&parent_pcb->children, &child_id_elem.elem);
+    // Initialise a PCB for the new process thread
+    init_pcb (&new_pcb, tid, parent_pcb->id);
+  } else {
+    init_pcb (&new_pcb, tid, CHILDLESS_PARENT_ID);
+  }
 
   // Add PCB to the list of all active PCBs
   list_push_back (&pcb_list, &new_pcb.elem);
-  
+  intr_set_level (old_level);
+
   return tid;
 }
 
@@ -169,7 +174,7 @@ start_process (void *file_name_)
   if_.esp = if_.esp - sizeof (int);
   (*(int *)(if_.esp)) = 0;  
 
-  hex_dump(if_.esp, if_.esp, PHYS_BASE - if_.esp, 1);
+  // hex_dump(if_.esp, if_.esp, PHYS_BASE - if_.esp, 1);
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
@@ -205,13 +210,18 @@ bool process_has_child (struct list *children, pid_t child_id) {
 
 
 pcb *get_pcb_from_id (tid_t tid) {
+  enum intr_level old_level = intr_disable ();
+  
   struct list_elem *e;
   for (e = list_begin (&pcb_list); e != list_end (&pcb_list); e = list_next (e)) {
     pcb *current_pcb = list_entry (e, pcb, elem);
-    if (current_pcb->id == tid) {
+    ASSERT(current_pcb != NULL);
+    if (current_pcb->id == tid) { // interrupted?
       return current_pcb;
     }
   }
+
+  intr_set_level (old_level);
   return NULL;
 }
 
@@ -263,6 +273,7 @@ void
 process_exit (void)
 {
   struct thread *cur = thread_current ();
+  enum intr_level old_level = intr_disable ();
   pcb *current_pcb = get_pcb_from_id  (cur->tid);
   current_pcb->exit_status = cur->process_status;
   uint32_t *pd;
@@ -294,7 +305,7 @@ process_exit (void)
     sema_up (&parent_pcb->sema);
   }
   
-  
+  intr_set_level (old_level);
 }
 
 /* Sets up the CPU for running user code in the current
