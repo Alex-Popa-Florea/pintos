@@ -677,11 +677,3 @@ install_page (void *upage, void *kpage, bool writable)
           && pagedir_set_page (t->pagedir, upage, kpage, writable));
 }
 
-void verify_address (const void *vaddr) {
-  if (!is_user_vaddr (vaddr)) {
-    exit (-1);
-  }
-  if (!pagedir_get_page(thread_current ()->pagedir, vaddr)) {
-    exit (-1);
-  }
-}
