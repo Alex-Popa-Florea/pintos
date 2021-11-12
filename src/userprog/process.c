@@ -19,6 +19,7 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 #include "lib/string.h"
+#include "threads/malloc.h"
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
@@ -53,28 +54,29 @@ process_execute (const char *file_name)
   char *newStrPointer;
   char *arg1 = strtok_r(str, " ", &newStrPointer);
 
+  enum intr_level old_level = intr_disable ();
+
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (arg1, PRI_DEFAULT, start_process, fn_copy);
-  
+
   if (tid == TID_ERROR) 
     palloc_free_page (fn_copy); 
   
-  enum intr_level old_level = intr_disable ();
   // Make the new process a child of the current process
   pcb *parent_pcb = get_pcb_from_id (thread_current ()->tid);
-  pcb new_pcb;
-
-  if (parent_pcb != NULL) {
-    id_elem child_id_elem = {.id = tid};
-    list_push_back (&parent_pcb->children, &child_id_elem.elem);
-    // Initialise a PCB for the new process thread
-    init_pcb (&new_pcb, tid, parent_pcb->id);
-  } else {
-    init_pcb (&new_pcb, tid, CHILDLESS_PARENT_ID);
+  if(parent_pcb == NULL){
+    parent_pcb = (pcb *) malloc(sizeof(pcb));
+    init_pcb(parent_pcb,thread_current ()->tid,CHILDLESS_PARENT_ID);
+    list_push_back (&pcb_list, &parent_pcb->elem);
   }
-
+  
+  // Initialise a PCB for the new process thread
+  pcb *new_pcb = (pcb *) malloc(sizeof(pcb));
+  init_pcb (new_pcb, tid, parent_pcb->id);
+  list_push_back (&parent_pcb->children, &new_pcb->child_elem);
+ 
   // Add PCB to the list of all active PCBs
-  list_push_back (&pcb_list, &new_pcb.elem);
+  list_push_back (&pcb_list, &new_pcb->elem);
   intr_set_level (old_level);
 
   return tid;
@@ -124,6 +126,9 @@ start_process (void *file_name_)
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
   success = load (file_name, &if_.eip, &if_.esp);
+
+
+  uint32_t *page = pagedir_get_page(thread_current ()->pagedir, if_.esp);
 
   palloc_free_page (whole_file);
   /* If load failed, quit. */
@@ -201,7 +206,7 @@ void init_pcb (pcb *pcb, int id, int parent_id) {
 bool process_has_child (struct list *children, pid_t child_id) {
   struct list_elem *e;
   for (e = list_begin (children); e != list_end (children); e = list_next (e)) {
-    if (list_entry (e, id_elem, elem)->id == child_id) {
+    if (list_entry (e, pcb, child_elem)->id == child_id) {
       return true;
     }
   }
@@ -215,8 +220,7 @@ pcb *get_pcb_from_id (tid_t tid) {
   struct list_elem *e;
   for (e = list_begin (&pcb_list); e != list_end (&pcb_list); e = list_next (e)) {
     pcb *current_pcb = list_entry (e, pcb, elem);
-    ASSERT(current_pcb != NULL);
-    if (current_pcb->id == tid) { // interrupted?
+    if (current_pcb->id == tid) {
       return current_pcb;
     }
   }
@@ -244,6 +248,10 @@ process_wait (tid_t child_tid)
 
   pcb *current_pcb = get_pcb_from_id (current_thread->tid);
 
+  if(!current_pcb){
+     sema_down (&current_pcb->sema);
+    return 0;
+  }
   // The thread does not correspond to a child process of the current process
   if (!process_has_child (&current_pcb->children, child_tid)) {
     return -1;
@@ -262,7 +270,9 @@ process_wait (tid_t child_tid)
   }
 
   // Blocks the current process's thread
+  
   sema_down (&current_pcb->sema);
+
   child_pcb->hasWaited = true;
   return child_pcb->exit_status;
 }
@@ -300,7 +310,10 @@ process_exit (void)
   if (parent_pcb == NULL) {
     // The parent process has already terminated
     list_remove (&current_pcb->elem);
+    free(&current_pcb);
   }  else {
+    list_remove(&current_pcb->child_elem);
+
     // The parent process still exists
     sema_up (&parent_pcb->sema);
   }

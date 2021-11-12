@@ -44,12 +44,7 @@ exit (int status) {
 int 
 write (int fd, const void *buffer, unsigned size) {
   if (fd == 1) {
-    int split_size = size;
-    while (split_size > 500) {
-      putbuf (buffer, 500);
-      split_size -= 500;
-    }
-    putbuf (buffer, split_size);    
+    putbuf (buffer, size);    
   }
   return size;
 }
