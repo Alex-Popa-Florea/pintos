@@ -18,15 +18,15 @@ void verify_address (const void *vaddr);
 /*
     Struct for a process control block, storing a process and relevant info
 */
-typedef struct {  
-    int id; // Id of the thread which equals the id of the process
-    int parent_id; // A parent_id of -1 means a process has no parent
-    struct list_elem elem;
-    struct list_elem child_elem;
-    struct list children;
-    int exit_status;
-    struct semaphore sema; // Semaphore used to block the thread of the corresponding process
-    bool hasWaited; // Boolean to track if a wait has already been called on the process
+typedef struct {   
+    int id;                         // Id of the thread which equals the id of the process
+    int parent_id;                  // A parent_id of -1 means a process has no parent
+    struct list_elem elem;          // Elem to insert pcb into a list
+    struct list_elem child_elem;    // Elem to insert pcb into child list
+    struct list children;           // Stores list of children pcbs
+    int exit_status;                // Status of the process
+    struct semaphore sema;          // Semaphore used to block the thread of the corresponding process
+    bool hasWaited;                 // Boolean to track if a wait has already been called on the process
 } pcb;
 
 /*

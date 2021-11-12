@@ -30,5 +30,6 @@ void close (int fd);
 
 struct process_file *file_finder (int fd);
 void verify_address (const void *vaddr);
+void verify_arguments (int *addr, int num_of_args);
 void print_termination_output (void);
 #endif /* userprog/syscall.h */

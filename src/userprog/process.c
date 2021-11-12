@@ -54,19 +54,20 @@ process_execute (const char *file_name)
   char *newStrPointer;
   char *arg1 = strtok_r(str, " ", &newStrPointer);
 
-  enum intr_level old_level = intr_disable ();
+  
 
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (arg1, PRI_DEFAULT, start_process, fn_copy);
-
   if (tid == TID_ERROR) 
     palloc_free_page (fn_copy); 
-  
+
+  enum intr_level old_level = intr_disable ();
+
   // Make the new process a child of the current process
   pcb *parent_pcb = get_pcb_from_id (thread_current ()->tid);
-  if(parent_pcb == NULL){
+  if (parent_pcb == NULL) {
     parent_pcb = (pcb *) malloc(sizeof(pcb));
-    init_pcb(parent_pcb,thread_current ()->tid,CHILDLESS_PARENT_ID);
+    init_pcb (parent_pcb, thread_current ()->tid, CHILDLESS_PARENT_ID);
     list_push_back (&pcb_list, &parent_pcb->elem);
   }
   
@@ -77,8 +78,8 @@ process_execute (const char *file_name)
  
   // Add PCB to the list of all active PCBs
   list_push_back (&pcb_list, &new_pcb->elem);
-  intr_set_level (old_level);
 
+  intr_set_level (old_level);
   return tid;
 }
 
@@ -128,7 +129,7 @@ start_process (void *file_name_)
   success = load (file_name, &if_.eip, &if_.esp);
 
 
-  uint32_t *page = pagedir_get_page(thread_current ()->pagedir, if_.esp);
+  void *esp = pagedir_get_page(thread_current ()->pagedir, if_.esp);
 
   palloc_free_page (whole_file);
   /* If load failed, quit. */
@@ -143,41 +144,41 @@ start_process (void *file_name_)
   char *argv_ptrs[argc];
 
   for (int i = argc - 1; i >= 0; i--) {
-    if_.esp = if_.esp - sizeof (char) * (strlen (argv[i]) + 1);
-    strlcpy (if_.esp, argv[i], sizeof (char) * (strlen (argv[i]) + 1));
-    argv_ptrs[i] = if_.esp;
+    esp = esp - sizeof (char) * (strlen (argv[i]) + 1);
+    strlcpy (esp, argv[i], sizeof (char) * (strlen (argv[i]) + 1));
+    argv_ptrs[i] = esp;
   }
 
   // Adds word align buffer to the stack
-  if_.esp = if_.esp - sizeof (uint8_t);
+  esp = esp - sizeof (uint8_t);
   uint8_t word_align = 0;
-  *(uint8_t *)(if_.esp) = word_align;
+  *(uint8_t *)(esp) = word_align;
   
   // Adds null pointer sentinel to the stack
-  if_.esp = if_.esp - sizeof (char *);
-  (*(char *)(if_.esp)) = 0; 
+  esp = esp - sizeof (char *);
+  (*(char *)(esp)) = 0; 
   
   
   // Adds addresses of arguments to stack
   for (int j = argc - 1; j >= 0; j--) {
-    if_.esp = if_.esp - sizeof (char *);
-    *(char **)(if_.esp) = argv_ptrs[j];
+    esp = esp - sizeof (char *);
+    *(char **)(esp) = argv_ptrs[j];
   }
   
   // Adds pointer to the start of argument array to stack
-  if_.esp = if_.esp - sizeof (char **);
-  char **argv_ptr = if_.esp + sizeof (char **);
-  *(char ***)(if_.esp) = argv_ptr;
+  esp = esp - sizeof (char **);
+  char **argv_ptr = esp + sizeof (char **);
+  *(char ***)(esp) = argv_ptr;
   
 
   // Adds number of arguments to stack
-  if_.esp = if_.esp - sizeof (int);
-  memcpy (if_.esp, &argc, sizeof (int));
+  esp = esp - sizeof (int);
+  memcpy (esp, &argc, sizeof (int));
   
   
   // Adds return address to stack
-  if_.esp = if_.esp - sizeof (int);
-  (*(int *)(if_.esp)) = 0;  
+  esp = esp - sizeof (int);
+  (*(int *)(esp)) = 0;    
 
   // hex_dump(if_.esp, if_.esp, PHYS_BASE - if_.esp, 1);
 
@@ -191,8 +192,9 @@ start_process (void *file_name_)
   NOT_REACHED ();
 }
 
-
-
+/*
+  Initialises a pcb with no children.
+*/
 void init_pcb (pcb *pcb, int id, int parent_id) {
   pcb->id = id;
   pcb->parent_id = parent_id;
@@ -202,7 +204,9 @@ void init_pcb (pcb *pcb, int id, int parent_id) {
   pcb->hasWaited = false;
 }
 
-
+/*
+  Returns whether a process has a child pcb with the corresponding id.
+*/
 bool process_has_child (struct list *children, pid_t child_id) {
   struct list_elem *e;
   for (e = list_begin (children); e != list_end (children); e = list_next (e)) {
@@ -213,9 +217,11 @@ bool process_has_child (struct list *children, pid_t child_id) {
   return false;
 }
 
-
+/*
+  Returns a pointer to the pcb with the coresponding id, NULL if no match.
+  Assumes interrupts are disabled.
+*/
 pcb *get_pcb_from_id (tid_t tid) {
-  enum intr_level old_level = intr_disable ();
   
   struct list_elem *e;
   for (e = list_begin (&pcb_list); e != list_end (&pcb_list); e = list_next (e)) {
@@ -225,7 +231,6 @@ pcb *get_pcb_from_id (tid_t tid) {
     }
   }
 
-  intr_set_level (old_level);
   return NULL;
 }
 
@@ -248,10 +253,11 @@ process_wait (tid_t child_tid)
 
   pcb *current_pcb = get_pcb_from_id (current_thread->tid);
 
-  if(!current_pcb){
-     sema_down (&current_pcb->sema);
-    return 0;
-  }
+  // if(!current_pcb){
+  //   sema_down (&current_pcb->sema); 
+  //   return 0;
+  // }
+
   // The thread does not correspond to a child process of the current process
   if (!process_has_child (&current_pcb->children, child_tid)) {
     return -1;

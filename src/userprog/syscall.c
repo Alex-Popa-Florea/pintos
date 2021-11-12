@@ -25,22 +25,81 @@ syscall_init (void)
 }
 
 static void
-syscall_handler (struct intr_frame *f UNUSED) 
+syscall_handler (struct intr_frame *f) 
 {
   int *addr = f->esp;
   verify_address (addr);
   int system_call = *addr;
   printf ("Call: %d\n", system_call);
 
+  switch (system_call)
+  {
+  case SYS_HALT:
+    halt();
+    break;
   
+  case SYS_EXIT:
+    verify_arguments (addr, 1);
+    exit ((int) *(addr + 1));
+    break;
 
-  if (system_call == SYS_EXIT) {
-    exit (0);
-  } else if (system_call == SYS_WRITE){
-    //write (1, )
-  } else {
-    print_termination_output ();
-    thread_exit ();
+  case SYS_EXEC:
+    verify_arguments (addr, 1);
+    f->eax = exec ((const char *) *(addr + 1));
+    break;
+
+  case SYS_WAIT:
+    verify_arguments (addr, 1);
+    f->eax = wait ((pid_t) *(addr + 1));
+    break;
+
+  case SYS_CREATE:
+    verify_arguments (addr, 2);
+    f->eax = create ((const char *) *(addr + 1), (unsigned) *(addr + 2));
+    break;
+
+  case SYS_REMOVE:
+    verify_arguments (addr, 1);
+    f->eax = remove ((const char *) *(addr + 1));
+    break;
+
+  case SYS_OPEN:
+    verify_arguments (addr, 1);
+    f->eax = open ((const char *) *(addr + 1));
+    break;
+
+  case SYS_FILESIZE:
+    verify_arguments (addr, 1);
+    f->eax = filesize ((int) *(addr + 1));
+    break;
+
+  case SYS_READ:
+    verify_arguments (addr, 3);
+    f->eax = read ((int) *(addr + 1), (void *) *(addr + 2), (unsigned) *(addr + 3));
+    break;
+
+  case SYS_WRITE:
+    verify_arguments (addr, 3);
+    f->eax = write ((int) *(addr + 1), (const void *) *(addr + 2), (unsigned) *(addr + 3));
+    break;
+
+  case SYS_SEEK:
+    verify_arguments (addr, 2);
+    seek ((int) *(addr + 1), (unsigned) *(addr + 2));
+    break;
+
+  case SYS_TELL:
+    verify_arguments (addr, 1);
+    f->eax = tell ((int) *(addr + 1));
+    break;
+
+  case SYS_CLOSE:
+    verify_arguments (addr, 1);
+    close ((int) *(addr + 1));
+    break;
+  
+  default:
+    break;
   }
   
 }
@@ -256,6 +315,12 @@ verify_address (const void *vaddr) {
   }
   if (!pagedir_get_page(thread_current ()->pagedir, vaddr)) {
     exit (-1);
+  }
+}
+
+void verify_arguments (int *addr, int num_of_args) {
+  for (int i = 1; i < num_of_args + 1; i++) {
+    verify_address ((const void *) addr[i]);
   }
 }
 
