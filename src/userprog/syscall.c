@@ -16,16 +16,39 @@
 #include "threads/malloc.h"
 #include "lib/user/syscall.h"
 
-static void syscall_handler (struct intr_frame *);
 struct lock file_system_lock; // Lock to ensure only one process can access file system at once
+
+static syscall_func_info syscall_arr[NUM_SYSCALLS];
+
+static void syscall_arr_setup(void);
+static void syscall_handler (struct intr_frame *);
+
+/* Wrapper functions for all system call functions that require arguments */
+static void halt_wrapper (void);
+static void exit_wrapper (int *);
+static void exec_wrapper (uint32_t *, int *);
+static void wait_wrapper (uint32_t *, int *);
+static void create_wrapper (uint32_t *, int *);
+static void remove_wrapper (uint32_t *, int *);
+static void open_wrapper (uint32_t *, int *);
+static void filesize_wrapper (uint32_t *, int *);
+static void read_wrapper (uint32_t *, int *);
+static void write_wrapper (uint32_t *, int *);
+static void seek_wrapper (int *);
+static void tell_wrapper (uint32_t *, int *);
+static void close_wrapper (int *);
 
 void
 syscall_init (void) 
 {
   lock_init (&file_system_lock);
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
+  syscall_arr_setup ();
 }
 
+/*
+  Calls the function corresponding to the system call calling the handler
+*/
 static void
 syscall_handler (struct intr_frame *f) 
 {
@@ -33,97 +56,41 @@ syscall_handler (struct intr_frame *f)
   int *addr = f->esp;
   verify_address (addr);
   int system_call = *addr;
-  //printf ("Call: %d\n", system_call);
 
-  switch (system_call)
-  {
-    case SYS_HALT:
-      //printf ("SYS_HALT\n");
-      halt();
-      break;
-    
-    case SYS_EXIT:
-      //printf ("SYS_EXIT\n");
-      verify_arguments (addr, 1);
-      exit ((int) *(addr + 1));
-      break;
+  syscall_func_info syscall = syscall_arr[system_call];
+  syscall_func func = syscall.func;
+  int args = syscall.num_args;
+  bool has_return = syscall.has_return;
 
-    case SYS_EXEC:
-      //printf ("SYS_EXEC\n");
-      verify_arguments (addr, 1);
-      f->eax = exec ((const char *) *(addr + 1));
-      break;
-
-    case SYS_WAIT:
-      //printf ("SYS_WAIT\n");
-      verify_arguments (addr, 1);
-      f->eax = wait ((pid_t) *(addr + 1));
-      break;
-
-    case SYS_CREATE:
-      //printf ("SYS_CREATE\n");
-      verify_arguments (addr, 2);
-      f->eax = create ((const char *) *(addr + 1), (unsigned) *(addr + 2));
-      break;
-
-    case SYS_REMOVE:
-      //printf ("SYS_REMOVE\n");
-      verify_arguments (addr, 1);
-      f->eax = remove ((const char *) *(addr + 1));
-      break;
-
-    case SYS_OPEN:
-      //printf ("SYS_OPEN\n");
-      verify_arguments (addr, 1);
-      f->eax = open ((const char *) *(addr + 1));
-      break;
-
-    case SYS_FILESIZE:
-      //printf ("SYS_FILESIZE\n");
-      verify_arguments (addr, 1);
-      f->eax = filesize ((int) *(addr + 1));
-      break;
-
-    case SYS_READ:
-      //printf ("SYS_READ\n");
-      verify_arguments (addr, 3);
-      f->eax = read ((int) *(addr + 1), (void *) *(addr + 2), (unsigned) *(addr + 3));
-      break;
-
-    case SYS_WRITE:
-      //printf ("SYS_WRITE\n");
-      //verify_address (addr + 7);
-      //verify_address
-      verify_arguments (addr, 3);
-      f->eax = write ((int) *(addr + 1), (const void *) *(addr + 2), (unsigned) *(addr + 3));
-      break;
-
-    case SYS_SEEK:
-      //printf ("SYS_SEEK\n");
-      verify_arguments (addr, 2);
-      seek ((int) *(addr + 1), (unsigned) *(addr + 2));
-      break;
-
-    case SYS_TELL:
-      //printf ("SYS_TELL\n");
-      verify_arguments (addr, 1);
-      f->eax = tell ((int) *(addr + 1));
-      break;
-
-    case SYS_CLOSE:
-      //printf ("SYS_CLOSE\n");
-      verify_arguments (addr, 1);
-      close ((int) *(addr + 1));
-      break;
-    
-    default:
-      break;
+  if (args > 0) {
+    verify_arguments (addr, args);
+    if (has_return) {
+      func (&(f->eax), addr);
+    } else {
+      func (addr);
+    }
+  } else {
+    if (has_return) {
+      func (&(f->eax));
+    } else {
+      func ();
+    }
   }
+}
+
+static void 
+halt_wrapper (void) {
+  halt ();
 }
 
 void
 halt (void) {
   shutdown_power_off ();
+}
+
+static void 
+exit_wrapper (int *addr) {
+  exit ((int) *(addr + 1));
 }
 
 void 
@@ -141,6 +108,10 @@ exit (int status) {
   thread_exit ();
 }
 
+static void 
+exec_wrapper (uint32_t *eax , int *addr) {
+  *eax = exec ((const char *) *(addr + 1));
+}
 pid_t 
 exec (const char *cmd_line) {
   verify_address (cmd_line);
@@ -171,9 +142,20 @@ exec (const char *cmd_line) {
 
 }
 
-int wait (pid_t pid) {
+static void 
+wait_wrapper (uint32_t *eax, int *addr) {
+  *eax = wait ((pid_t) *(addr + 1));
+}
+
+int 
+wait (pid_t pid) {
   //printf ("I called wait\n");
   return process_wait (pid);
+}
+
+static void 
+create_wrapper (uint32_t *eax, int *addr) {
+  *eax = create ((const char *) *(addr + 1), (unsigned) *(addr + 2));
 }
 
 bool 
@@ -186,6 +168,11 @@ create (const char *file, unsigned initial_size) {
   return success;
 }
 
+static void
+remove_wrapper (uint32_t *eax, int *addr) {
+  *eax = remove ((const char *) *(addr + 1));
+}
+
 bool
 remove (const char *file) {
   verify_address (file);
@@ -194,6 +181,11 @@ remove (const char *file) {
   bool success = filesys_remove (file);
   lock_release (&file_system_lock);
   return success;
+}
+
+static void 
+open_wrapper (uint32_t *eax, int *addr) {
+  *eax = open ((const char *) *(addr + 1));
 }
 
 int 
@@ -223,6 +215,11 @@ open (const char *file) {
   return file_descriptor;
 }
 
+static void 
+filesize_wrapper (uint32_t *eax, int *addr) {
+  *eax = filesize ((int) *(addr + 1));
+}
+
 int 
 filesize (int fd) {
   //printf ("I called filesize with %d\n", fd);
@@ -238,6 +235,11 @@ filesize (int fd) {
   lock_release (&file_system_lock);
 
   return file_size;
+}
+
+static void
+read_wrapper (uint32_t *eax, int *addr) {
+  *eax = read ((int) *(addr + 1), (void *) *(addr + 2), (unsigned) *(addr + 3));
 }
 
 int 
@@ -260,6 +262,11 @@ read (int fd, void *buffer, unsigned size) {
   lock_release (&file_system_lock);
 
   return bytes_read;
+}
+
+static void
+write_wrapper (uint32_t *eax, int *addr) {
+  *eax = write ((int) *(addr + 1), (const void *) *(addr + 2), (unsigned) *(addr + 3));
 }
 
 int 
@@ -289,6 +296,11 @@ write (int fd, const void *buffer, unsigned size) {
   return bytes_written;
 }
 
+static void
+seek_wrapper (int *addr) {
+  seek ((int) *(addr + 1), (unsigned) *(addr + 2));
+}
+
 void 
 seek (int fd, unsigned position) {
   //printf ("I called read with %d, %d\n", fd, position);
@@ -301,6 +313,11 @@ seek (int fd, unsigned position) {
 
   lock_release (&file_system_lock);
 
+}
+
+static void
+tell_wrapper (uint32_t *eax, int *addr) {
+  *eax = tell ((int) *(addr + 1));
 }
 
 unsigned 
@@ -318,6 +335,11 @@ tell (int fd) {
   lock_release (&file_system_lock);
 
   return position;
+}
+
+static void
+close_wrapper (int *addr) {
+  close ((int) *(addr + 1));
 }
 
 void 
@@ -356,13 +378,6 @@ file_finder (int fd) {
   return NULL;
 }
 
-// for (e = list_begin (&pcb_list); e != list_end (&pcb_list); e = list_next (e)) {
-//     pcb *current_pcb = list_entry (e, pcb, elem);
-//     if (current_pcb->id == tid) {
-//       return current_pcb;
-//     }
-//   }
-
 void 
 verify_address (const void *vaddr) {
   if (!is_user_vaddr (vaddr)) {
@@ -393,4 +408,98 @@ print_termination_output (void) {
 bool
 is_filename_valid (const char *filename) {
   return filesys_open (filename) != NULL;
+}
+
+/*
+  Initialise syscall_arr to store information about each system call function
+*/
+static void syscall_arr_setup(void) {
+
+  for (int i = SYS_HALT; i <= SYS_INUMBER; i++) {
+    syscall_func_info info = {0};
+    switch (i)
+    {
+      case SYS_HALT:
+        info.num_args = 0;
+        info.func = &halt_wrapper;
+        info.has_return = false;
+        break;
+      
+      case SYS_EXIT:
+        info.num_args = 1;
+        info.func = &exit_wrapper;
+        info.has_return = false;
+        break;
+
+      case SYS_EXEC:
+        info.num_args = 1;
+        info.func = &exec_wrapper;
+        info.has_return = true;
+        break;
+
+      case SYS_WAIT:
+        info.num_args = 1;
+        info.func = &wait_wrapper;
+        info.has_return = true;
+        break;
+
+      case SYS_CREATE:
+        info.num_args = 2;
+        info.func = &create_wrapper;
+        info.has_return = true;
+        break;
+
+      case SYS_REMOVE:
+        info.num_args = 1;
+        info.func = &remove_wrapper;
+        info.has_return = true;
+        break;
+
+      case SYS_OPEN:
+        info.num_args = 1;
+        info.func = &open_wrapper;
+        info.has_return = true;
+        break;
+
+      case SYS_FILESIZE:
+        info.num_args = 1;
+        info.func = &filesize_wrapper;
+        info.has_return = true;
+        break;
+
+      case SYS_READ:
+        info.num_args = 3;
+        info.func = &read_wrapper;
+        info.has_return = true;
+        break;
+
+      case SYS_WRITE:
+        info.num_args = 3;
+        info.func = &write_wrapper;
+        info.has_return = true;
+        break;
+
+      case SYS_SEEK:
+        info.num_args = 2;
+        info.func = &seek_wrapper;
+        info.has_return = false;
+        break;
+
+      case SYS_TELL:
+        info.num_args = 1;
+        info.func = &tell_wrapper;
+        info.has_return = true;
+        break;
+
+      case SYS_CLOSE:
+        info.num_args = 1;
+        info.func = &close_wrapper;
+        info.has_return = false;
+        break;
+      
+      default:
+        break;
+    }
+    syscall_arr[i] = info;
+  }
 }

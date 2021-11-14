@@ -4,6 +4,7 @@
 #include "lib/user/syscall.h"
 #include <list.h>
 
+#define NUM_SYSCALLS (20)
 
 /*
     Struct to map file pointers to file descriptors
@@ -14,6 +15,19 @@ typedef struct
     int file_descriptor;
     struct list_elem file_elem;
 } process_file;
+
+
+typedef void (*syscall_func)();     // Generic type for system call functions
+
+/*
+    Struct to store information about each system call function
+*/
+typedef struct {
+    int num_args;             // Number of arguments required by func
+    syscall_func func;        // System call function func
+    bool has_return;          // Records whether func returns a value or not
+} syscall_func_info;
+
 
 void syscall_init (void);
 
