@@ -759,10 +759,16 @@ calculate_load_avg (void)
 }
 
 
+#ifdef USERPROG
+
 void 
-set_process_status (struct thread *thread, int status) {
-  #ifdef USERPROG
-    //printf ("Thread %d changed its status from %d to %d\n", thread->tid, thread->process_status, status);
-    thread->process_status = status;
-  #endif
+set_process_status (struct thread *t, int status) {
+  //printf ("Thread %d changed its status from %d to %d\n", thread->tid, thread->process_status, status);
+  t->process_status = status;
 }
+
+void increment_current_file_descriptor (struct thread *t) {
+  t->current_file_descriptor++;
+}
+
+#endif

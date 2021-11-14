@@ -27,7 +27,8 @@ static bool load (const char *cmdline, void (**eip) (void), void **esp);
 
 #define COMMAND_LINE_LIMIT (128)
 
-struct list pcb_list = LIST_INITIALIZER (pcb_list);
+struct list pcb_list = LIST_INITIALIZER (pcb_list); // Initialise a list to store all PCBs
+extern struct lock file_system_lock; // Use the same global file system lock as defined in userprog/syscall.c
 
 
 /* Starts a new thread running a user program loaded from
@@ -55,12 +56,12 @@ process_execute (const char *file_name)
   char *newStrPointer;
   char *arg1 = strtok_r(str, " ", &newStrPointer);
 
-  
 
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (arg1, PRI_DEFAULT, start_process, fn_copy);
   if (tid == TID_ERROR) 
     palloc_free_page (fn_copy); 
+
 
   enum intr_level old_level = intr_disable ();
 
@@ -70,13 +71,14 @@ process_execute (const char *file_name)
   // Make the new process a child of the current process
   pcb *parent_pcb = get_pcb_from_id (thread_current ()->tid);
   if (parent_pcb == NULL) {
-    parent_pcb = (pcb *) malloc(sizeof(pcb));
+    // Edge case: the first process created has no parent
+    parent_pcb = (pcb *) malloc (sizeof(pcb));
     init_pcb (parent_pcb, thread_current ()->tid, CHILDLESS_PARENT_ID);
     list_push_back (&pcb_list, &parent_pcb->elem);
   }
   
   // Initialise a PCB for the new process thread
-  pcb *new_pcb = (pcb *) malloc(sizeof(pcb));
+  pcb *new_pcb = (pcb *) malloc (sizeof(pcb));
   init_pcb (new_pcb, tid, parent_pcb->id);
   list_push_back (&parent_pcb->children, &new_pcb->child_elem);
  
@@ -135,9 +137,6 @@ start_process (void *file_name_)
   if_.eflags = FLAG_IF | FLAG_MBS;
   success = load (file_name, &if_.eip, &if_.esp);
 
-
-  //uint32_t *page = pagedir_get_page(thread_current ()->pagedir, if_.esp);
-
   palloc_free_page (whole_file);
   /* If load failed, quit. */
   if (!success) 
@@ -145,6 +144,7 @@ start_process (void *file_name_)
 
   
   // Setting up the stack 
+
   /*
     Adding the parsed arguments to stack
   */
@@ -234,7 +234,6 @@ process_has_child (struct list *children, pid_t child_id) {
 */
 pcb 
 *get_pcb_from_id (tid_t tid) {
-  
   struct list_elem *e;
   for (e = list_begin (&pcb_list); e != list_end (&pcb_list); e = list_next (e)) {
     pcb *current_pcb = list_entry (e, pcb, elem);
@@ -248,7 +247,6 @@ pcb
 
 void
 print_pcb_ids (void) {
-
   struct list_elem *e;
 
   for (e = list_begin (&pcb_list); e != list_end (&pcb_list);
@@ -282,11 +280,6 @@ process_wait (tid_t child_tid)
   //print_pcb_ids ();
   pcb *current_pcb = get_pcb_from_id (current_thread->tid);
 
-  // if(!current_pcb){
-  //   sema_down (&current_pcb->sema); 
-  //   return 0;
-  // }
-
   // The thread does not correspond to a child process of the current process
   if (!process_has_child (&current_pcb->children, child_tid)) {
     return -1;
@@ -300,8 +293,6 @@ process_wait (tid_t child_tid)
   //printf ("--- IN WAIT MIDDLE PCBS ARE:\n");
   //print_pcb_ids ();
 
-  //intr_set_level (old_level);
-
   // Child process has already terminated
   if (child_pcb->exit_status != PROCESS_UNTOUCHED_STATUS) {
     return child_pcb->exit_status;
@@ -311,10 +302,11 @@ process_wait (tid_t child_tid)
   //print_pcb_ids ();
 
   intr_set_level (old_level);
-  // Blocks the current process's thread
-  
+
+  // Block the current process' thread
   sema_down (&current_pcb->sema);
 
+  // The child process has now terminated, so the current process runs
   child_pcb->hasWaited = true;
   int child_exit_status = child_pcb->exit_status;
   list_remove (&child_pcb->elem);
@@ -327,7 +319,6 @@ process_wait (tid_t child_tid)
 void
 process_exit (void)
 {
-  
   struct thread *cur = thread_current ();
   //printf ("\nIN EXIT CURR THREAD ID: %d\n", cur->tid);
   enum intr_level old_level = intr_disable ();
@@ -343,10 +334,10 @@ process_exit (void)
   if (parent_pcb == NULL) {
     // The parent process has already terminated
     list_remove (&current_pcb->elem);
-    free(&current_pcb);
-  }  else {
-    list_remove(&current_pcb->child_elem);
+    free (&current_pcb);
+  } else {
 
+    list_remove(&current_pcb->child_elem);
     // The parent process still exists
     sema_up (&parent_pcb->sema);
   }
@@ -357,8 +348,7 @@ process_exit (void)
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
   pd = cur->pagedir;
-  if (pd != NULL) 
-    {
+  if (pd != NULL) {
       /* Correct ordering here is crucial.  We must set
          cur->pagedir to NULL before switching page directories,
          so that a timer interrupt can't switch back to the

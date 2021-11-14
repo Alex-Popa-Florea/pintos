@@ -108,7 +108,7 @@ struct thread
     int process_status;                 /* Status of the process which owns the thread. */
     bool is_thread_user_process;        /* Marks if a thread belongs to the kernel or a user process. */
 
-    int current_file_descriptor;        /* Stores the file descriptor of the last file opened, used giving files fds. */  
+    int current_file_descriptor;        /* Stores the file descriptor of the last file opened or used. */  
     struct list file_list;              /* Stores the list of files opened by the thread. */
 #endif
     /* Owned by thread.c. */
@@ -159,5 +159,11 @@ void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
-void set_process_status (struct thread *thread, int status);
+
+
+#ifdef USERPROG
+   void set_process_status (struct thread *, int);
+   void increment_current_file_descriptor (struct thread *);
+#endif
+
 #endif /* threads/thread.h */

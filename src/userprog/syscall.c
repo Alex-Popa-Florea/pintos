@@ -16,7 +16,7 @@
 #include "lib/user/syscall.h"
 
 static void syscall_handler (struct intr_frame *);
-struct lock file_system_lock;
+struct lock file_system_lock; // Lock to ensure only one process can access file system at once
 
 void
 syscall_init (void) 
@@ -36,89 +36,88 @@ syscall_handler (struct intr_frame *f)
 
   switch (system_call)
   {
-  case SYS_HALT:
-    //printf ("SYS_HALT\n");
-    halt();
-    break;
-  
-  case SYS_EXIT:
-    //printf ("SYS_EXIT\n");
-    verify_arguments (addr, 1);
-    exit ((int) *(addr + 1));
-    break;
+    case SYS_HALT:
+      //printf ("SYS_HALT\n");
+      halt();
+      break;
+    
+    case SYS_EXIT:
+      //printf ("SYS_EXIT\n");
+      verify_arguments (addr, 1);
+      exit ((int) *(addr + 1));
+      break;
 
-  case SYS_EXEC:
-    //printf ("SYS_EXEC\n");
-    verify_arguments (addr, 1);
-    f->eax = exec ((const char *) *(addr + 1));
-    break;
+    case SYS_EXEC:
+      //printf ("SYS_EXEC\n");
+      verify_arguments (addr, 1);
+      f->eax = exec ((const char *) *(addr + 1));
+      break;
 
-  case SYS_WAIT:
-    //printf ("SYS_WAIT\n");
-    verify_arguments (addr, 1);
-    f->eax = wait ((pid_t) *(addr + 1));
-    break;
+    case SYS_WAIT:
+      //printf ("SYS_WAIT\n");
+      verify_arguments (addr, 1);
+      f->eax = wait ((pid_t) *(addr + 1));
+      break;
 
-  case SYS_CREATE:
-    //printf ("SYS_CREATE\n");
-    verify_arguments (addr, 2);
-    f->eax = create ((const char *) *(addr + 1), (unsigned) *(addr + 2));
-    break;
+    case SYS_CREATE:
+      //printf ("SYS_CREATE\n");
+      verify_arguments (addr, 2);
+      f->eax = create ((const char *) *(addr + 1), (unsigned) *(addr + 2));
+      break;
 
-  case SYS_REMOVE:
-    //printf ("SYS_REMOVE\n");
-    verify_arguments (addr, 1);
-    f->eax = remove ((const char *) *(addr + 1));
-    break;
+    case SYS_REMOVE:
+      //printf ("SYS_REMOVE\n");
+      verify_arguments (addr, 1);
+      f->eax = remove ((const char *) *(addr + 1));
+      break;
 
-  case SYS_OPEN:
-    //printf ("SYS_OPEN\n");
-    verify_arguments (addr, 1);
-    f->eax = open ((const char *) *(addr + 1));
-    break;
+    case SYS_OPEN:
+      //printf ("SYS_OPEN\n");
+      verify_arguments (addr, 1);
+      f->eax = open ((const char *) *(addr + 1));
+      break;
 
-  case SYS_FILESIZE:
-    //printf ("SYS_FILESIZE\n");
-    verify_arguments (addr, 1);
-    f->eax = filesize ((int) *(addr + 1));
-    break;
+    case SYS_FILESIZE:
+      //printf ("SYS_FILESIZE\n");
+      verify_arguments (addr, 1);
+      f->eax = filesize ((int) *(addr + 1));
+      break;
 
-  case SYS_READ:
-    //printf ("SYS_READ\n");
-    verify_arguments (addr, 3);
-    f->eax = read ((int) *(addr + 1), (void *) *(addr + 2), (unsigned) *(addr + 3));
-    break;
+    case SYS_READ:
+      //printf ("SYS_READ\n");
+      verify_arguments (addr, 3);
+      f->eax = read ((int) *(addr + 1), (void *) *(addr + 2), (unsigned) *(addr + 3));
+      break;
 
-  case SYS_WRITE:
-    //printf ("SYS_WRITE\n");
-    //verify_address (addr + 7);
-    //verify_address
-    verify_arguments (addr, 3);
-    f->eax = write ((int) *(addr + 1), (const void *) *(addr + 2), (unsigned) *(addr + 3));
-    break;
+    case SYS_WRITE:
+      //printf ("SYS_WRITE\n");
+      //verify_address (addr + 7);
+      //verify_address
+      verify_arguments (addr, 3);
+      f->eax = write ((int) *(addr + 1), (const void *) *(addr + 2), (unsigned) *(addr + 3));
+      break;
 
-  case SYS_SEEK:
-    //printf ("SYS_SEEK\n");
-    verify_arguments (addr, 2);
-    seek ((int) *(addr + 1), (unsigned) *(addr + 2));
-    break;
+    case SYS_SEEK:
+      //printf ("SYS_SEEK\n");
+      verify_arguments (addr, 2);
+      seek ((int) *(addr + 1), (unsigned) *(addr + 2));
+      break;
 
-  case SYS_TELL:
-    //printf ("SYS_TELL\n");
-    verify_arguments (addr, 1);
-    f->eax = tell ((int) *(addr + 1));
-    break;
+    case SYS_TELL:
+      //printf ("SYS_TELL\n");
+      verify_arguments (addr, 1);
+      f->eax = tell ((int) *(addr + 1));
+      break;
 
-  case SYS_CLOSE:
-    //printf ("SYS_CLOSE\n");
-    verify_arguments (addr, 1);
-    close ((int) *(addr + 1));
-    break;
-  
-  default:
-    break;
+    case SYS_CLOSE:
+      //printf ("SYS_CLOSE\n");
+      verify_arguments (addr, 1);
+      close ((int) *(addr + 1));
+      break;
+    
+    default:
+      break;
   }
-  
 }
 
 void
@@ -171,11 +170,8 @@ remove (const char *file) {
   verify_address (file);
   //printf ("I called remove with %s\n", file);
   lock_acquire (&file_system_lock);
-
   bool success = filesys_remove (file);
-
   lock_release (&file_system_lock);
-
   return success;
 }
 
@@ -186,20 +182,22 @@ open (const char *file) {
   lock_acquire (&file_system_lock);
 
   struct file *new_file = filesys_open (file);
-  //file_deny_write (new_file);
   if (new_file == NULL) {
     lock_release (&file_system_lock);
     return -1;
   }
 
-  struct process_file *process_file = malloc (sizeof (process_file));   // ?? is malloc needed or is this file ??
+
+  // Initialise a process file mapping the file pointer to the file descriptor
+  process_file *process_file = malloc (sizeof (process_file));   // ?? is malloc needed or is this file ??
   process_file->file = new_file;
   int file_descriptor = thread_current ()->current_file_descriptor;
   process_file->file_descriptor = file_descriptor;
-  thread_current ()->current_file_descriptor++;
+
+  increment_current_file_descriptor (thread_current ());
   list_push_front (&thread_current ()->file_list, &process_file->file_elem);
 
-  lock_release (&file_system_lock); // ?? here or just after filesys_open (file) ??
+  lock_release (&file_system_lock);
 
   return file_descriptor;
 }
@@ -211,7 +209,7 @@ filesize (int fd) {
 
   int file_size = -1;
 
-  struct process_file *process_file = file_finder (fd);
+  process_file *process_file = file_finder (fd);
   if (process_file) {
     file_size = file_length (process_file->file);
   }
@@ -233,7 +231,7 @@ read (int fd, void *buffer, unsigned size) {
 
   int bytes_read = -1;
 
-  struct process_file *process_file = file_finder (fd);
+  process_file *process_file = file_finder (fd);
   if (process_file) {
     bytes_read = file_read (process_file->file, buffer, size);
   }
@@ -260,7 +258,7 @@ write (int fd, const void *buffer, unsigned size) {
 
   int bytes_written = 0;
 
-  struct process_file *process_file = file_finder (fd);
+  process_file *process_file = file_finder (fd);
   if (process_file) {
     bytes_written = file_write (process_file->file, buffer, size);
   }
@@ -275,7 +273,7 @@ seek (int fd, unsigned position) {
   //printf ("I called read with %d, %d\n", fd, position);
   lock_acquire (&file_system_lock);
 
-  struct process_file *process_file = file_finder (fd);
+  process_file *process_file = file_finder (fd);
   if (process_file) {
     file_seek (process_file->file, position);
   }
@@ -291,7 +289,7 @@ tell (int fd) {
 
   int position = 0;
 
-  struct process_file *process_file = file_finder (fd);
+  process_file *process_file = file_finder (fd);
   if (process_file) {
     position = file_tell (process_file->file);
   }
@@ -306,7 +304,7 @@ close (int fd) {
   //printf ("I called close with %d\n", fd);
   lock_acquire (&file_system_lock);
 
-  struct process_file *process_file = file_finder (fd);
+  process_file *process_file = file_finder (fd);
   if (process_file) {
     file_close (process_file->file);
     //file_allow_write (process_file->file);
@@ -318,25 +316,31 @@ close (int fd) {
   return;
 }
 
-struct process_file *
+process_file *
 file_finder (int fd) {
-  if (list_empty (&thread_current ()->file_list)) {
+
+  struct list *file_list = &thread_current ()->file_list;
+  
+  if (list_empty (file_list)) {
     return NULL;
   }
-  struct list_elem *element = list_front (&thread_current ()->file_list);
 
-  while (element != list_tail (&thread_current ()->file_list)) {
-
-    struct process_file *process_file = list_entry (element, struct process_file, file_elem);
-    
-    if (process_file->file_descriptor == fd) {
-      return process_file;
+  struct list_elem *e;
+  for (e = list_begin (file_list); e != list_end (file_list); e = list_next (e)) {
+    process_file *current_file = list_entry (e, process_file, file_elem);
+    if (current_file->file_descriptor == fd) {
+      return current_file;
     }
-    
-    element = element->next;
   }
   return NULL;
 }
+
+// for (e = list_begin (&pcb_list); e != list_end (&pcb_list); e = list_next (e)) {
+//     pcb *current_pcb = list_entry (e, pcb, elem);
+//     if (current_pcb->id == tid) {
+//       return current_pcb;
+//     }
+//   }
 
 void 
 verify_address (const void *vaddr) {

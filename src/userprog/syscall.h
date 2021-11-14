@@ -4,13 +4,16 @@
 #include "lib/user/syscall.h"
 #include <list.h>
 
-struct process_file
+
+/*
+    Struct to map file pointers to file descriptors
+*/
+typedef struct
 {
     struct file *file;
     int file_descriptor;
-
     struct list_elem file_elem;
-};
+} process_file;
 
 void syscall_init (void);
 
@@ -28,7 +31,7 @@ void seek (int fd, unsigned position);
 unsigned tell (int fd);
 void close (int fd);
 
-struct process_file *file_finder (int fd);
+process_file *file_finder (int fd);
 void verify_address (const void *vaddr);
 void verify_arguments (int *addr, int num_of_args);
 void print_termination_output (void);
