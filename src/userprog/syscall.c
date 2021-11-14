@@ -1,6 +1,7 @@
 #include "userprog/syscall.h"
 #include <stdio.h>
 #include <syscall-nr.h>
+#include <string.h>
 #include "lib/kernel/console.h"
 #include "threads/interrupt.h"
 #include "threads/thread.h"
@@ -139,8 +140,21 @@ exec (const char *cmd_line) {
   //printf ("I called exec with %s\n", cmd_line);
   if (!cmd_line) {
     return -1;
-  }
+  } 
+  
   lock_acquire (&file_system_lock);
+
+  // Extract the name of the file from the command
+  int command_size = strlen(cmd_line) + 1;
+  char str[command_size];
+  strlcpy (str, cmd_line, command_size);
+  char *strPointer;
+  char *file_name = strtok_r(str, " ", &strPointer);
+
+  if (!is_filename_valid (file_name)) {
+    lock_release (&file_system_lock);
+    return -1;
+  }
 
   pid_t new_process_pid = process_execute (cmd_line);
 
@@ -366,4 +380,10 @@ void verify_arguments (int *addr, int num_of_args) {
 void 
 print_termination_output (void) {
   printf ("%s: exit(%d)\n", thread_current ()->name, thread_current ()->process_status);
+}
+
+
+bool
+is_filename_valid (const char *filename) {
+  return filesys_open (filename) != NULL;
 }

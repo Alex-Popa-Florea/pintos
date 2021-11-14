@@ -49,12 +49,12 @@ process_execute (const char *file_name)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
 
-  int file_name_size = strlen(file_name) + 1;
-  char str[file_name_size];
-  strlcpy (str, file_name, file_name_size);
-
-  char *newStrPointer;
-  char *arg1 = strtok_r(str, " ", &newStrPointer);
+  // Extract the name of the file from the command
+  int command_size = strlen(file_name) + 1;
+  char str[command_size];
+  strlcpy (str, file_name, command_size);
+  char *strPointer;
+  char *arg1 = strtok_r(str, " ", &strPointer);
 
 
   /* Create a new thread to execute FILE_NAME. */
@@ -362,6 +362,8 @@ process_exit (void)
     }
 }
 
+
+
 /* Sets up the CPU for running user code in the current
    thread.
    This function is called on every context switch. */
@@ -461,6 +463,8 @@ load (const char *file_name, void (**eip) (void), void **esp)
   bool success = false;
   int i;
 
+  lock_acquire (&file_system_lock);
+
   /* Allocate and activate page directory. */
   t->pagedir = pagedir_create ();
   if (t->pagedir == NULL) 
@@ -559,6 +563,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
  done:
   /* We arrive here whether the load is successful or not. */
   file_close (file);
+  lock_release (&file_system_lock);
   return success;
 }
 
