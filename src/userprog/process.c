@@ -201,9 +201,7 @@ start_process (void *file_name_)
   NOT_REACHED ();
 }
 
-/*
-  Initialises a pcb with no children.
-*/
+
 void 
 init_pcb (pcb *pcb, int id, int parent_id) {
   pcb->id = id;
@@ -214,9 +212,11 @@ init_pcb (pcb *pcb, int id, int parent_id) {
   pcb->hasWaited = false;
 }
 
-/*
-  Returns whether a process has a child pcb with the corresponding id.
-*/
+void
+pcb_set_waiting_on (pcb *pcb, int waiting_on) {
+  pcb->waiting_on = waiting_on;
+}
+
 bool 
 process_has_child (struct list *children, pid_t child_id) {
   struct list_elem *e;
@@ -228,10 +228,7 @@ process_has_child (struct list *children, pid_t child_id) {
   return false;
 }
 
-/*
-  Returns a pointer to the pcb with the coresponding id, NULL if no match.
-  Assumes interrupts are disabled.
-*/
+
 pcb 
 *get_pcb_from_id (tid_t tid) {
   struct list_elem *e;
@@ -244,6 +241,7 @@ pcb
 
   return NULL;
 }
+
 
 void
 print_pcb_ids (void) {
@@ -259,6 +257,9 @@ print_pcb_ids (void) {
       printf ("PCB EXITSTATUS: %d\n", current_pcb->exit_status);
     }
 }
+
+
+
 
 /* Waits for thread TID to die and returns its exit status. 
  * If it was terminated by the kernel (i.e. killed due to an exception), 
@@ -304,10 +305,12 @@ process_wait (tid_t child_tid)
   intr_set_level (old_level);
 
   // Block the current process' thread
+  current_pcb->waiting_on = child_tid;
   sema_down (&current_pcb->sema);
 
   // The child process has now terminated, so the current process runs
   child_pcb->hasWaited = true;
+  current_pcb->waiting_on = NOT_WAITING;
   int child_exit_status = child_pcb->exit_status;
   list_remove (&child_pcb->elem);
   free (child_pcb);
@@ -336,11 +339,13 @@ process_exit (void)
     list_remove (&current_pcb->elem);
     free (&current_pcb);
   } else {
-
-    list_remove(&current_pcb->child_elem);
     // The parent process still exists
-    sema_up (&parent_pcb->sema);
+    if (current_pcb->id == parent_pcb->waiting_on) {
+      list_remove (&current_pcb->child_elem);
+      sema_up (&parent_pcb->sema);
+    }
   }
+
   //printf ("--- IN EXIT END PCBS ARE:\n");
   //print_pcb_ids ();
   intr_set_level (old_level);
