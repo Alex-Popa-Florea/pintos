@@ -585,8 +585,11 @@ init_thread (struct thread *t, const char *name, int priority)
   list_init (&t->held_locks);
   t->needed_lock = NULL;
 
-  list_init (&t->file_list);
-  t->current_file_descriptor = 2;
+  #ifdef USERPROG
+    list_init (&t->file_list);
+    t->current_file_descriptor = 2;
+  #endif
+
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
   intr_set_level (old_level);
@@ -758,5 +761,8 @@ calculate_load_avg (void)
 
 void 
 set_process_status (struct thread *thread, int status) {
-  thread->process_status = status;
+  #ifdef USERPROG
+    //printf ("Thread %d changed its status from %d to %d\n", thread->tid, thread->process_status, status);
+    thread->process_status = status;
+  #endif
 }

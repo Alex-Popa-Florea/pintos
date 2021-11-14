@@ -20,6 +20,7 @@
 #include "threads/vaddr.h"
 #include "lib/string.h"
 #include "threads/malloc.h"
+#include "devices/timer.h"
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
@@ -38,7 +39,7 @@ process_execute (const char *file_name)
 {
   char *fn_copy;
   tid_t tid;
-  printf("Filename file_name? : %s\n", file_name);
+  //printf("Filename file_name? : %s\n", file_name);
 
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
@@ -63,6 +64,9 @@ process_execute (const char *file_name)
 
   enum intr_level old_level = intr_disable ();
 
+  //printf ("--- IN EXECUTE START PCBS ARE:\n");
+  //print_pcb_ids ();
+
   // Make the new process a child of the current process
   pcb *parent_pcb = get_pcb_from_id (thread_current ()->tid);
   if (parent_pcb == NULL) {
@@ -78,6 +82,9 @@ process_execute (const char *file_name)
  
   // Add PCB to the list of all active PCBs
   list_push_back (&pcb_list, &new_pcb->elem);
+
+  //printf ("--- IN EXECUTE END PCBS ARE:\n");
+  //print_pcb_ids ();
 
   intr_set_level (old_level);
   return tid;
@@ -114,7 +121,7 @@ start_process (void *file_name_)
   char *file_name = token;
 
   while (token != NULL) {
-    printf("Tokenised arg (start_process)? : %s\n", token);
+    //printf("Tokenised arg (start_process)? : %s\n", token);
     argv[argc] = token;
     argc++;
     token = strtok_r (NULL, " ", &save_ptr);
@@ -129,7 +136,7 @@ start_process (void *file_name_)
   success = load (file_name, &if_.eip, &if_.esp);
 
 
-  void *esp = pagedir_get_page(thread_current ()->pagedir, if_.esp);
+  //uint32_t *page = pagedir_get_page(thread_current ()->pagedir, if_.esp);
 
   palloc_free_page (whole_file);
   /* If load failed, quit. */
@@ -144,43 +151,45 @@ start_process (void *file_name_)
   char *argv_ptrs[argc];
 
   for (int i = argc - 1; i >= 0; i--) {
-    esp = esp - sizeof (char) * (strlen (argv[i]) + 1);
-    strlcpy (esp, argv[i], sizeof (char) * (strlen (argv[i]) + 1));
-    argv_ptrs[i] = esp;
+    if_.esp = if_.esp - sizeof (char) * (strlen (argv[i]) + 1);
+    strlcpy (if_.esp, argv[i], sizeof (char) * (strlen (argv[i]) + 1));
+    argv_ptrs[i] = if_.esp;
   }
 
   // Adds word align buffer to the stack
-  esp = esp - sizeof (uint8_t);
+  if_.esp = if_.esp - sizeof (uint8_t);
   uint8_t word_align = 0;
-  *(uint8_t *)(esp) = word_align;
+  *(uint8_t *)(if_.esp) = word_align;
   
   // Adds null pointer sentinel to the stack
-  esp = esp - sizeof (char *);
-  (*(char *)(esp)) = 0; 
+  if_.esp = if_.esp - sizeof (char *);
+  (*(char *)(if_.esp)) = 0; 
   
   
   // Adds addresses of arguments to stack
   for (int j = argc - 1; j >= 0; j--) {
-    esp = esp - sizeof (char *);
-    *(char **)(esp) = argv_ptrs[j];
+    if_.esp = if_.esp - sizeof (char *);
+    *(char **)(if_.esp) = argv_ptrs[j];
   }
   
   // Adds pointer to the start of argument array to stack
-  esp = esp - sizeof (char **);
-  char **argv_ptr = esp + sizeof (char **);
-  *(char ***)(esp) = argv_ptr;
+  if_.esp = if_.esp - sizeof (char **);
+  char **argv_ptr = if_.esp + sizeof (char **);
+  *(char ***)(if_.esp) = argv_ptr;
   
 
   // Adds number of arguments to stack
-  esp = esp - sizeof (int);
-  memcpy (esp, &argc, sizeof (int));
+  if_.esp = if_.esp - sizeof (int);
+  (*(int *)(if_.esp)) = argc;
+  //memcpy (if_.esp, &argc, sizeof (int));
   
   
   // Adds return address to stack
-  esp = esp - sizeof (int);
-  (*(int *)(esp)) = 0;    
+  if_.esp = if_.esp - sizeof (int);
+  (*(int *)(if_.esp)) = 0;  
 
-  // hex_dump(if_.esp, if_.esp, PHYS_BASE - if_.esp, 1);
+
+  //hex_dump(if_.esp, if_.esp, PHYS_BASE - if_.esp, 1);
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
@@ -195,11 +204,12 @@ start_process (void *file_name_)
 /*
   Initialises a pcb with no children.
 */
-void init_pcb (pcb *pcb, int id, int parent_id) {
+void 
+init_pcb (pcb *pcb, int id, int parent_id) {
   pcb->id = id;
   pcb->parent_id = parent_id;
   list_init (&pcb->children);
-  pcb->exit_status = 0;
+  pcb->exit_status = PROCESS_UNTOUCHED_STATUS;
   sema_init (&pcb->sema, 0);
   pcb->hasWaited = false;
 }
@@ -207,7 +217,8 @@ void init_pcb (pcb *pcb, int id, int parent_id) {
 /*
   Returns whether a process has a child pcb with the corresponding id.
 */
-bool process_has_child (struct list *children, pid_t child_id) {
+bool 
+process_has_child (struct list *children, pid_t child_id) {
   struct list_elem *e;
   for (e = list_begin (children); e != list_end (children); e = list_next (e)) {
     if (list_entry (e, pcb, child_elem)->id == child_id) {
@@ -221,7 +232,8 @@ bool process_has_child (struct list *children, pid_t child_id) {
   Returns a pointer to the pcb with the coresponding id, NULL if no match.
   Assumes interrupts are disabled.
 */
-pcb *get_pcb_from_id (tid_t tid) {
+pcb 
+*get_pcb_from_id (tid_t tid) {
   
   struct list_elem *e;
   for (e = list_begin (&pcb_list); e != list_end (&pcb_list); e = list_next (e)) {
@@ -234,6 +246,21 @@ pcb *get_pcb_from_id (tid_t tid) {
   return NULL;
 }
 
+void
+print_pcb_ids (void) {
+
+  struct list_elem *e;
+
+  for (e = list_begin (&pcb_list); e != list_end (&pcb_list);
+       e = list_next (e))
+    {
+      pcb *current_pcb = list_entry (e, pcb, elem);
+      printf ("PCB ID: %d\n", current_pcb->id);
+      printf ("PCB PARENT ID: %d\n", current_pcb->parent_id);
+      printf ("PCB HASWAITED: %d\n", current_pcb->hasWaited);
+      printf ("PCB EXITSTATUS: %d\n", current_pcb->exit_status);
+    }
+}
 
 /* Waits for thread TID to die and returns its exit status. 
  * If it was terminated by the kernel (i.e. killed due to an exception), 
@@ -247,10 +274,12 @@ pcb *get_pcb_from_id (tid_t tid) {
 int
 process_wait (tid_t child_tid) 
 {
+  //timer_sleep (600);
   struct thread *current_thread = thread_current ();
-
+  //printf ("\nIN WAIT CURR THREAD ID: %d\n", current_thread->tid);
   enum intr_level old_level = intr_disable ();
-
+  //printf ("--- IN WAIT START PCBS ARE:\n");
+  //print_pcb_ids ();
   pcb *current_pcb = get_pcb_from_id (current_thread->tid);
 
   // if(!current_pcb){
@@ -268,19 +297,29 @@ process_wait (tid_t child_tid)
     return -1;
   }
 
-  intr_set_level (old_level);
+  //printf ("--- IN WAIT MIDDLE PCBS ARE:\n");
+  //print_pcb_ids ();
+
+  //intr_set_level (old_level);
 
   // Child process has already terminated
   if (child_pcb->exit_status != PROCESS_UNTOUCHED_STATUS) {
     return child_pcb->exit_status;
   }
 
+  //printf ("--- IN WAIT END PCBS ARE:\n");
+  //print_pcb_ids ();
+
+  intr_set_level (old_level);
   // Blocks the current process's thread
   
   sema_down (&current_pcb->sema);
 
   child_pcb->hasWaited = true;
-  return child_pcb->exit_status;
+  int child_exit_status = child_pcb->exit_status;
+  list_remove (&child_pcb->elem);
+  free (child_pcb);
+  return child_exit_status;
 }
 
 
@@ -288,11 +327,32 @@ process_wait (tid_t child_tid)
 void
 process_exit (void)
 {
+  
   struct thread *cur = thread_current ();
+  //printf ("\nIN EXIT CURR THREAD ID: %d\n", cur->tid);
   enum intr_level old_level = intr_disable ();
+  //printf ("--- IN EXIT START PCBS ARE:\n");
+  //print_pcb_ids ();
   pcb *current_pcb = get_pcb_from_id  (cur->tid);
   current_pcb->exit_status = cur->process_status;
   uint32_t *pd;
+
+  pcb *parent_pcb = get_pcb_from_id (current_pcb->parent_id);
+  //printf ("--- IN EXIT MIDDLE PCBS ARE:\n");
+  //print_pcb_ids ();
+  if (parent_pcb == NULL) {
+    // The parent process has already terminated
+    list_remove (&current_pcb->elem);
+    free(&current_pcb);
+  }  else {
+    list_remove(&current_pcb->child_elem);
+
+    // The parent process still exists
+    sema_up (&parent_pcb->sema);
+  }
+  //printf ("--- IN EXIT END PCBS ARE:\n");
+  //print_pcb_ids ();
+  intr_set_level (old_level);
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
@@ -310,21 +370,6 @@ process_exit (void)
       pagedir_activate (NULL);
       pagedir_destroy (pd);
     }
-  
-  pcb *parent_pcb = get_pcb_from_id (current_pcb->parent_id);
-  
-  if (parent_pcb == NULL) {
-    // The parent process has already terminated
-    list_remove (&current_pcb->elem);
-    free(&current_pcb);
-  }  else {
-    list_remove(&current_pcb->child_elem);
-
-    // The parent process still exists
-    sema_up (&parent_pcb->sema);
-  }
-  
-  intr_set_level (old_level);
 }
 
 /* Sets up the CPU for running user code in the current
@@ -656,7 +701,7 @@ setup_stack (void **esp)
     {
       success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
       if (success)
-        *esp = PHYS_BASE - 12;
+        *esp = PHYS_BASE;
       else
         palloc_free_page (kpage);
     } 

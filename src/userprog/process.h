@@ -44,5 +44,6 @@ bool process_has_child (struct list *, pid_t);
 */
 pcb *get_pcb_from_id (tid_t);
 
+void print_pcb_ids (void);
 
 #endif /* userprog/process.h */
