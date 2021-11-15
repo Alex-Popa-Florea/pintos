@@ -65,7 +65,7 @@ process_execute (const char *file_name)
 
   enum intr_level old_level = intr_disable ();
 
-  //printf ("--- IN EXECUTE START PCBS ARE:\n");
+  //printf("AT THE START OF EXECUTE FOR THREAD %d, PCBS ARE:\n", thread_current ()->tid);
   //print_pcb_ids ();
 
   // Make the new process a child of the current process
@@ -85,8 +85,8 @@ process_execute (const char *file_name)
   // Add PCB to the list of all active PCBs
   list_push_back (&pcb_list, &new_pcb->elem);
 
-  //printf ("--- IN EXECUTE END PCBS ARE:\n");
-  //print_pcb_ids ();
+  //printf("AT THE END OF EXECUTE FOR THREAD %d, PCBS ARE:\n", thread_current ()->tid);
+  //print_pcb_ids();
 
   intr_set_level (old_level);
   return tid;
@@ -209,7 +209,7 @@ init_pcb (pcb *pcb, int id, int parent_id) {
   list_init (&pcb->children);
   pcb->exit_status = PROCESS_UNTOUCHED_STATUS;
   sema_init (&pcb->sema, 0);
-  pcb->hasWaited = false;
+  pcb->has_been_waited_on = false;
 }
 
 void
@@ -251,10 +251,10 @@ print_pcb_ids (void) {
        e = list_next (e))
     {
       pcb *current_pcb = list_entry (e, pcb, elem);
-      printf ("PCB ID: %d\n", current_pcb->id);
-      printf ("PCB PARENT ID: %d\n", current_pcb->parent_id);
-      printf ("PCB HASWAITED: %d\n", current_pcb->hasWaited);
-      printf ("PCB EXITSTATUS: %d\n", current_pcb->exit_status);
+      printf ("--PCB ID: %d\n", current_pcb->id);
+      printf ("--PCB PARENT ID: %d\n", current_pcb->parent_id);
+      printf ("--PCB HASBEENWAITEDON: %d\n", current_pcb->has_been_waited_on);
+      printf ("--PCB EXITSTATUS: %d\n", current_pcb->exit_status);
     }
 }
 
@@ -273,25 +273,24 @@ print_pcb_ids (void) {
 int
 process_wait (tid_t child_tid) 
 {
-  //timer_sleep (600);
   struct thread *current_thread = thread_current ();
-  //printf ("\nIN WAIT CURR THREAD ID: %d\n", current_thread->tid);
   enum intr_level old_level = intr_disable ();
-  //printf ("--- IN WAIT START PCBS ARE:\n");
+  //printf("AT THE START OF WAIT FOR THREAD %d, PCBS ARE:\n", thread_current ()->tid);
   //print_pcb_ids ();
   pcb *current_pcb = get_pcb_from_id (current_thread->tid);
 
   // The thread does not correspond to a child process of the current process
   if (!process_has_child (&current_pcb->children, child_tid)) {
+    //printf("i got here\n");
     return -1;
   }
 
   pcb *child_pcb = get_pcb_from_id (child_tid);
-  if (child_pcb->hasWaited) {
+  if (child_pcb->has_been_waited_on) {
     return -1;
   }
 
-  //printf ("--- IN WAIT MIDDLE PCBS ARE:\n");
+  //printf("AT THE MIDDLE OF WAIT FOR THREAD %d, PCBS ARE:\n", thread_current ()->tid);
   //print_pcb_ids ();
 
   // Child process has already terminated
@@ -299,21 +298,21 @@ process_wait (tid_t child_tid)
     return child_pcb->exit_status;
   }
 
-  //printf ("--- IN WAIT END PCBS ARE:\n");
-  //print_pcb_ids ();
-
-  intr_set_level (old_level);
-
   // Block the current process' thread
   current_pcb->waiting_on = child_tid;
   sema_down (&current_pcb->sema);
 
   // The child process has now terminated, so the current process runs
-  child_pcb->hasWaited = true;
+  child_pcb->has_been_waited_on = true;
   current_pcb->waiting_on = NOT_WAITING;
   int child_exit_status = child_pcb->exit_status;
   list_remove (&child_pcb->elem);
   free (child_pcb);
+
+  //printf("AT THE END OF WAIT FOR THREAD %d, PCBS ARE:\n", thread_current ()->tid);
+  //print_pcb_ids ();
+
+  intr_set_level (old_level);
   return child_exit_status;
 }
 
@@ -323,16 +322,30 @@ void
 process_exit (void)
 {
   struct thread *cur = thread_current ();
-  //printf ("\nIN EXIT CURR THREAD ID: %d\n", cur->tid);
   enum intr_level old_level = intr_disable ();
-  //printf ("--- IN EXIT START PCBS ARE:\n");
+  //printf("AT THE START OF EXIT FOR THREAD %d, PCBS ARE:\n", thread_current ()->tid);
   //print_pcb_ids ();
   pcb *current_pcb = get_pcb_from_id  (cur->tid);
   current_pcb->exit_status = cur->process_status;
   uint32_t *pd;
+  
+  lock_acquire (&file_system_lock);
+
+  struct list *file_list = &cur->file_list;
+
+  struct list_elem *e;
+  while (!list_empty (file_list)) {
+    e = list_pop_front (file_list);
+    process_file *current_file = list_entry (e, process_file, file_elem);
+    file_close (current_file->file);
+    list_remove (e);
+    free (current_file);
+  }
+  
+  lock_release (&file_system_lock);
 
   pcb *parent_pcb = get_pcb_from_id (current_pcb->parent_id);
-  //printf ("--- IN EXIT MIDDLE PCBS ARE:\n");
+  //printf("AT THE MIDDLE OF EXIT FOR THREAD %d, PCBS ARE:\n", thread_current ()->tid);
   //print_pcb_ids ();
   if (parent_pcb == NULL) {
     // The parent process has already terminated
@@ -346,7 +359,7 @@ process_exit (void)
     }
   }
 
-  //printf ("--- IN EXIT END PCBS ARE:\n");
+  //printf("AT THE END OF EXIT FOR THREAD %d, PCBS ARE:\n", thread_current ()->tid);
   //print_pcb_ids ();
   intr_set_level (old_level);
 
@@ -483,6 +496,8 @@ load (const char *file_name, void (**eip) (void), void **esp)
       printf ("load: %s: open failed\n", file_name);
       goto done; 
     }
+  
+  //file_deny_write (file);
 
   /* Read and verify executable header. */
   if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
@@ -567,7 +582,13 @@ load (const char *file_name, void (**eip) (void), void **esp)
 
  done:
   /* We arrive here whether the load is successful or not. */
-  file_close (file);
+  if (!success) {
+    file_close (file);
+  }
+  if (success) {
+    //printf("denied\n");
+    file_deny_write (file);
+  }
   lock_release (&file_system_lock);
   return success;
 }

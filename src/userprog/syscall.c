@@ -134,9 +134,9 @@ exec (const char *cmd_line) {
     return -1;
   }
 
+  lock_release (&file_system_lock);
   pid_t new_process_pid = process_execute (cmd_line);
 
-  lock_release (&file_system_lock);
 
   return new_process_pid;
 
@@ -386,6 +386,9 @@ verify_address (const void *vaddr) {
   }
   if (!pagedir_get_page(thread_current ()->pagedir, vaddr)) {
     //printf ("Pagedir failed\n");
+    exit (-1);
+  }
+  if (!vaddr) {
     exit (-1);
   }
   //printf ("Passed argument verification\n");
