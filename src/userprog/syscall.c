@@ -98,11 +98,11 @@ exit (int status) {
   //printf ("I called exit with %d\n", status);
 
   // Check the argument does not exceed the maximum user address
-  if (status > PHYS_BASE) {
-    set_process_status (thread_current (), -1);
-  } else {
+  //if (status > PHYS_BASE) {
+  //  set_process_status (thread_current (), -1);
+  //} else {
     set_process_status (thread_current (), status);
-  }
+  //}
 
   print_termination_output ();
   thread_exit ();

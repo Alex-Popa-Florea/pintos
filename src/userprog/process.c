@@ -28,7 +28,7 @@ static bool load (const char *cmdline, void (**eip) (void), void **esp);
 #define COMMAND_LINE_LIMIT (128)
 
 struct list pcb_list = LIST_INITIALIZER (pcb_list); // Initialise a list to store all PCBs
-extern struct lock file_system_lock; // Use the same global file system lock as defined in userprog/syscall.c
+//extern struct lock file_system_lock; // Use the same global file system lock as defined in userprog/syscall.c
 
 
 /* Starts a new thread running a user program loaded from
@@ -139,7 +139,7 @@ start_process (void *file_name_)
   palloc_free_page (whole_file);
   /* If load failed, quit. */
   if (!success) 
-    thread_exit ();
+    exit (-1);
 
   
   // Setting up the stack 
@@ -327,6 +327,8 @@ process_exit (void)
   lock_acquire (&file_system_lock);
 
   struct list *file_list = &cur->file_list;
+
+  file_close (cur->executable_file);
 
   struct list_elem *e;
   while (!list_empty (file_list)) {
@@ -581,6 +583,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
   }
   if (success) {
     //printf("denied\n");
+    t->executable_file = file;
     file_deny_write (file);
   }
   lock_release (&file_system_lock);

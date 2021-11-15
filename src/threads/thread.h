@@ -110,6 +110,7 @@ struct thread
 
     int current_file_descriptor;        /* Stores the file descriptor of the last file opened or used. */  
     struct list file_list;              /* Stores the list of files opened by the thread. */
+    struct file *executable_file;       /* Pointer to the file the thread is executing. */
 #endif
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
