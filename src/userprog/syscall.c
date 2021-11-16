@@ -95,15 +95,7 @@ exit_wrapper (int *addr) {
 
 void 
 exit (int status) {
-  //printf ("I called exit with %d\n", status);
-
-  // Check the argument does not exceed the maximum user address
-  if (status > PHYS_BASE) {
-    set_process_status (thread_current (), -1);
-  } else {
-    set_process_status (thread_current (), status);
-  }
-
+  set_process_status (thread_current (), status);
   print_termination_output ();
   thread_exit ();
 }
@@ -388,17 +380,13 @@ verify_address (const void *vaddr) {
     //printf ("Pagedir failed\n");
     exit (-1);
   }
-  if (!vaddr) {
-    exit (-1);
-  }
   //printf ("Passed argument verification\n");
 }
 
 void verify_arguments (int *addr, int num_of_args) {
   //printf ("I am verifying the arguments\n");
-  for (int i = 1; i < num_of_args + 1; i++) {
-    //printf ("Argument %d\n", i);
-    verify_address ((const void *) addr + i);
+  for (int i = 1; i <= num_of_args; i++) {
+    verify_address ((const void *) (addr + i));
   }
 }
 

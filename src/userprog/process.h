@@ -24,11 +24,9 @@ typedef struct {
     int parent_id;                  // A parent_id of -1 means a process has no parent
     int waiting_on;                 // Id of the child process that a parent process waits on
     struct list_elem elem;          // Elem to insert pcb into a list
-    struct list_elem child_elem;    // Elem to insert pcb into child list
-    struct list children;           // Stores list of children pcbs
     int exit_status;                // Status of the process
     struct semaphore sema;          // Semaphore used to block the thread of the corresponding process
-    bool has_been_waited_on;                 // Boolean to track if a wait has already been called on the process
+    bool has_been_waited_on;        // Boolean to track if a wait has already been called on the process
 } pcb;
 
 /*
@@ -37,9 +35,10 @@ typedef struct {
 void init_pcb (pcb *, int, int);
 
 /*
-    Returns true if the process contains the child in its list of children
+    Returns true if the process has another process as its child
 */
-bool process_has_child (struct list *, pid_t);
+bool
+process_has_child (pcb *parent, pid_t child_id);
 
 /*
     Sets the id of the child process a parent waits on

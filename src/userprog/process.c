@@ -28,7 +28,7 @@ static bool load (const char *cmdline, void (**eip) (void), void **esp);
 #define COMMAND_LINE_LIMIT (128)
 
 struct list pcb_list = LIST_INITIALIZER (pcb_list); // Initialise a list to store all PCBs
-extern struct lock file_system_lock; // Use the same global file system lock as defined in userprog/syscall.c
+//extern struct lock file_system_lock; // Use the same global file system lock as defined in userprog/syscall.c
 
 
 /* Starts a new thread running a user program loaded from
@@ -80,7 +80,6 @@ process_execute (const char *file_name)
   // Initialise a PCB for the new process thread
   pcb *new_pcb = (pcb *) malloc (sizeof(pcb));
   init_pcb (new_pcb, tid, parent_pcb->id);
-  list_push_back (&parent_pcb->children, &new_pcb->child_elem);
  
   // Add PCB to the list of all active PCBs
   list_push_back (&pcb_list, &new_pcb->elem);
@@ -140,7 +139,7 @@ start_process (void *file_name_)
   palloc_free_page (whole_file);
   /* If load failed, quit. */
   if (!success) 
-    thread_exit ();
+    exit (-1);
 
   
   // Setting up the stack 
@@ -206,7 +205,6 @@ void
 init_pcb (pcb *pcb, int id, int parent_id) {
   pcb->id = id;
   pcb->parent_id = parent_id;
-  list_init (&pcb->children);
   pcb->exit_status = PROCESS_UNTOUCHED_STATUS;
   sema_init (&pcb->sema, 0);
   pcb->has_been_waited_on = false;
@@ -218,16 +216,13 @@ pcb_set_waiting_on (pcb *pcb, int waiting_on) {
 }
 
 bool 
-process_has_child (struct list *children, pid_t child_id) {
-  struct list_elem *e;
-  for (e = list_begin (children); e != list_end (children); e = list_next (e)) {
-    if (list_entry (e, pcb, child_elem)->id == child_id) {
-      return true;
-    }
+process_has_child (pcb *parent, pid_t child_id) {
+  pcb *child_pcb = get_pcb_from_id (child_id);
+  if (!child_pcb) {
+    return false;
   }
-  return false;
+  return parent->id == child_pcb->parent_id;
 }
-
 
 pcb 
 *get_pcb_from_id (tid_t tid) {
@@ -280,7 +275,7 @@ process_wait (tid_t child_tid)
   pcb *current_pcb = get_pcb_from_id (current_thread->tid);
 
   // The thread does not correspond to a child process of the current process
-  if (!process_has_child (&current_pcb->children, child_tid)) {
+  if (!process_has_child (current_pcb, child_tid)) {
     //printf("i got here\n");
     return -1;
   }
@@ -333,6 +328,8 @@ process_exit (void)
 
   struct list *file_list = &cur->file_list;
 
+  file_close (cur->executable_file);
+
   struct list_elem *e;
   while (!list_empty (file_list)) {
     e = list_pop_front (file_list);
@@ -354,7 +351,6 @@ process_exit (void)
   } else {
     // The parent process still exists
     if (current_pcb->id == parent_pcb->waiting_on) {
-      list_remove (&current_pcb->child_elem);
       sema_up (&parent_pcb->sema);
     }
   }
@@ -587,6 +583,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
   }
   if (success) {
     //printf("denied\n");
+    t->executable_file = file;
     file_deny_write (file);
   }
   lock_release (&file_system_lock);

@@ -28,6 +28,7 @@ typedef struct {
     bool has_return;          // Records whether func returns a value or not
 } syscall_func_info;
 
+extern struct lock file_system_lock; // Allows other files to access the same lock.
 
 void syscall_init (void);
 
