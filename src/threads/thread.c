@@ -14,10 +14,10 @@
 #include "threads/synch.h"
 #include "threads/vaddr.h"
 #include "devices/timer.h"
-#include "userprog/process.h"
 
 #ifdef USERPROG
 #include "userprog/process.h"
+#include "threads/malloc.h"
 #endif
 
 /* Random value for struct thread's `magic' member.
@@ -232,10 +232,23 @@ thread_create (const char *name, int priority,
 
   /* Initialize thread. */
   init_thread (t, name, priority);
+  tid = t->tid = allocate_tid ();
   #ifdef USERPROG
     t->parent_id = thread_current ()->tid;
+    pcb * current_pcb = (pcb *) malloc (sizeof(pcb));
+    
+    if(thread_current () == initial_thread){
+      pcb * parent_pcb = (pcb *) malloc (sizeof(pcb));
+      init_pcb (parent_pcb, thread_current ()->tid, CHILDLESS_PARENT_ID);
+      lock_acquire(&pcb_list_lock);
+      list_push_back (&pcb_list, &parent_pcb->elem);
+      lock_release(&pcb_list_lock);
+    }
+    init_pcb (current_pcb, tid, thread_current ()->tid);
+    lock_acquire(&pcb_list_lock);
+    list_push_back (&pcb_list, &current_pcb->elem);
+    lock_release(&pcb_list_lock);
   #endif
-  tid = t->tid = allocate_tid ();
 
   /* Prepare thread for first run by initializing its stack.
      Do this atomically so intermediate values for the 'stack' 

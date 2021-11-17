@@ -47,6 +47,7 @@ static void close_wrapper (int *);
 static process_file *find_file (int);
 static void verify_address (const void *);
 static void verify_arguments (int *, int);
+static void verify_buffer(const void *buffer, int size);
 static void print_termination_output (void);
 
 static void syscall_arr_setup (void);
@@ -137,6 +138,7 @@ exec (const char *cmd_line) {
   /* Block the current process until it knows the success of the child process load */
   pcb *current_pcb = get_pcb_from_id (thread_current ()->tid);
   pid_t new_process_pid = process_execute (cmd_line);
+  ASSERT(current_pcb);
 
   sema_down (&current_pcb->load_sema);
   
@@ -203,6 +205,7 @@ open_wrapper (uint32_t *eax, int *addr) {
   *eax = open ((const char *) *(addr + 1));
 }
 
+
 int 
 open (const char *file) {
   verify_address (file);
@@ -265,7 +268,7 @@ read_wrapper (uint32_t *eax, int *addr) {
 
 int 
 read (int fd, void *buffer, unsigned size) {
-  verify_address (buffer);
+  verify_buffer (buffer,size);
   if (fd == 0) {
     return input_getc ();
   }
@@ -294,7 +297,7 @@ write_wrapper (uint32_t *eax, int *addr) {
 
 int 
 write (int fd, const void *buffer, unsigned size) {
-  verify_address (buffer);
+  verify_buffer (buffer, size);
   if (fd == 0) {
     return 0;
   }
@@ -421,6 +424,22 @@ verify_address (const void *vaddr) {
   if (!pagedir_get_page(thread_current ()->pagedir, vaddr)) {
     exit (-1);
   }
+}
+
+static void
+verify_buffer(const void *buffer, int size){
+  if (!is_user_vaddr (buffer)) {
+    exit (-1);
+  }
+  for (int i = 0; i < size; i += 1024){
+    if (!pagedir_get_page(thread_current ()->pagedir, buffer + i)) {
+      exit (-1);
+    }
+  }
+  if (!pagedir_get_page(thread_current ()->pagedir, buffer + size)) {
+    exit (-1);
+  }
+  
 }
 
 /* 

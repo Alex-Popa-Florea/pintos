@@ -53,26 +53,26 @@ process_execute (const char *file_name)
   char *strPointer;
   char *arg1 = strtok_r(str, " ", &strPointer);
 
-  pcb *parent_pcb = get_pcb_from_id (thread_current ()->tid);
+  //pcb *parent_pcb = get_pcb_from_id (thread_current ()->tid);
   
-  if (parent_pcb == NULL) {
-    parent_pcb = (pcb *) malloc (sizeof(pcb));
-    init_pcb (parent_pcb, thread_current ()->tid, CHILDLESS_PARENT_ID);
-    lock_acquire(&pcb_list_lock);
-    list_push_back (&pcb_list, &parent_pcb->elem);
-    lock_release(&pcb_list_lock);
-  }
-  
+  // if (parent_pcb == NULL) {
+  //   parent_pcb = (pcb *) malloc (sizeof(pcb));
+  //   init_pcb (parent_pcb, thread_current ()->tid, CHILDLESS_PARENT_ID);
+  //   lock_acquire(&pcb_list_lock);
+  //   list_push_back (&pcb_list, &parent_pcb->elem);
+  //   lock_release(&pcb_list_lock);
+  // }
+  //lock_acquire(&pcb_list_lock);
   tid = thread_create (arg1, PRI_DEFAULT, start_process, fn_copy);
   if (tid == TID_ERROR) 
     palloc_free_page (fn_copy); 
 
-  pcb *new_pcb = (pcb *) malloc (sizeof(pcb));
-  init_pcb (new_pcb, tid, parent_pcb->id);
+  // pcb *new_pcb = (pcb *) malloc (sizeof(pcb));
+  // init_pcb (new_pcb, tid, parent_pcb->id);
   
-  lock_acquire(&pcb_list_lock);
-  list_push_back (&pcb_list, &new_pcb->elem);
-  lock_release(&pcb_list_lock);
+  
+  //list_push_back (&pcb_list, &new_pcb->elem);
+  //lock_release(&pcb_list_lock);
   return tid;
 }
 
@@ -257,7 +257,7 @@ process_wait (tid_t child_tid)
 {
   struct thread *current_thread = thread_current ();
   pcb *current_pcb = get_pcb_from_id (current_thread->tid);
-  
+  //ASSERT(current_pcb);
   if (!process_has_child (current_pcb, child_tid)) {
     return -1;
   }
@@ -309,7 +309,6 @@ process_exit (void)
   /* When a process exits, free all its child processes which have terminated */
   for (e = list_begin (&pcb_list); e != list_end (&pcb_list);) {
     pcb *child_pcb = list_entry (e, pcb, elem);
-    ASSERT(current_pcb);
     if (child_pcb->parent_id == current_pcb->id && child_pcb->exit_status != PROCESS_UNTOUCHED_STATUS)  {
       e = list_remove (&child_pcb->elem);
       free (child_pcb);
