@@ -18,12 +18,13 @@
 
 struct lock file_system_lock; // Lock to ensure only one process can access file system at once
 
+/* Array storing information about each system call function */
 static syscall_func_info syscall_arr[NUM_SYSCALLS];
 
 static void syscall_arr_setup(void);
 static void syscall_handler (struct intr_frame *);
 
-/* Wrapper functions for all system call functions that require arguments */
+/* Wrapper functions for all system call functions */
 static void halt_wrapper (void);
 static void exit_wrapper (int *);
 static void exec_wrapper (uint32_t *, int *);

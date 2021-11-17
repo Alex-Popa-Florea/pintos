@@ -25,6 +25,7 @@
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 
+/* Limit on size of command-line arguments (bytes) */
 #define COMMAND_LINE_LIMIT (128)
 
 struct list pcb_list = LIST_INITIALIZER (pcb_list); // Initialise a list to store all PCBs
@@ -111,7 +112,8 @@ start_process (void *file_name_)
     Assuming the maxium number of arguments is COMMAND_LINE_LIMIT / 2
       - each argument a character long separated by whitespace
   */
-  char *argv[COMMAND_LINE_LIMIT / 2];
+  int limit = COMMAND_LINE_LIMIT / 2;
+  char *argv[limit];
 
   /* 
     argc - stores the number of command line arguments
@@ -121,7 +123,7 @@ start_process (void *file_name_)
   token = strtok_r (str, " ", &save_ptr);
   char *file_name = token;
 
-  while (token != NULL) {
+  while (token != NULL && argc < limit) {
     //printf("Tokenised arg (start_process)? : %s\n", token);
     argv[argc] = token;
     argc++;
@@ -180,7 +182,6 @@ start_process (void *file_name_)
   // Adds number of arguments to stack
   if_.esp = if_.esp - sizeof (int);
   (*(int *)(if_.esp)) = argc;
-  //memcpy (if_.esp, &argc, sizeof (int));
   
   
   // Adds return address to stack
