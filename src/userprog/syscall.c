@@ -17,7 +17,7 @@
 #include "lib/user/syscall.h"
 
 /* List of all pcbs as defined in process.c */
-extern struct list pcb_list;
+//extern struct list pcb_list;
 
 /* Lock that ensures only one process can access file system at once */
 struct lock file_system_lock; 
@@ -114,7 +114,7 @@ exit_wrapper (int *addr) {
 
 void 
 exit (int status) {
-  set_process_status (thread_current (), status);
+  set_exit_status (get_pcb_from_id (thread_current ()->tid), status);
   print_termination_output ();
   thread_exit ();
 }
@@ -438,7 +438,7 @@ verify_arguments (int *addr, int num_of_args) {
 */
 static void 
 print_termination_output (void) {
-  printf ("%s: exit(%d)\n", thread_current ()->name, thread_current ()->process_status);
+  printf ("%s: exit(%d)\n", thread_current ()->name, get_pcb_from_id(thread_current ()->tid)->exit_status);
 }
 
 /*

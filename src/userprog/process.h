@@ -9,6 +9,9 @@
 #include "threads/thread.h"
 #include "threads/synch.h"
 
+extern struct list pcb_list;
+extern struct lock pcb_list_lock;
+
 /* 
   Starts a new thread running a user program loaded from
   FILENAME.  The new thread may be scheduled (and may even exit)
@@ -71,4 +74,5 @@ bool process_has_child (pcb *parent, pid_t child_id);
 */
 pcb *get_pcb_from_id (tid_t);
 
+void set_exit_status (pcb *, int);
 #endif /* userprog/process.h */

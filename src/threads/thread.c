@@ -14,6 +14,7 @@
 #include "threads/synch.h"
 #include "threads/vaddr.h"
 #include "devices/timer.h"
+#include "userprog/process.h"
 
 #ifdef USERPROG
 #include "userprog/process.h"
@@ -113,6 +114,8 @@ thread_init (void)
   if (thread_mlfqs) {
     load_avg = (fp_int) {INITIAL_LOAD};
   }
+
+  lock_init (&pcb_list_lock);
 
   /* Set up a thread structure for the running thread. */
   init_thread (initial_thread, "main", PRI_DEFAULT);
@@ -589,7 +592,6 @@ init_thread (struct thread *t, const char *name, int priority)
   t->needed_lock = NULL;
 
   #ifdef USERPROG
-    t->process_status = -10;
     list_init (&t->file_list);
     t->current_file_descriptor = 2;
     t->executable_file = NULL;
@@ -765,12 +767,6 @@ calculate_load_avg (void)
 
 
 #ifdef USERPROG
-
-void 
-set_process_status (struct thread *t, int status) {
-  //printf("Thread %d changed its status from %d to %d\n", t->tid, t->process_status, status);
-  t->process_status = status;
-}
 
 void increment_current_file_descriptor (struct thread *t) {
   t->current_file_descriptor++;

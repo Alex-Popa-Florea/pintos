@@ -5,6 +5,7 @@
 #include <list.h>
 #include <stdint.h>
 #include "threads/fixed-point.h"
+
 /* States in a thread's life cycle. */
 enum thread_status
   {
@@ -105,9 +106,7 @@ struct thread
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
-    int process_status;                 /* Status of the process which owns the thread. */
     int parent_id;                      /* Id of the thread's parent */ 
-
     int current_file_descriptor;        /* Stores the file descriptor of the last file opened or used. */  
     struct list file_list;              /* Stores the list of files opened by the thread. */
     struct file *executable_file;       /* Pointer to the file the thread is executing. */
@@ -163,7 +162,6 @@ int thread_get_load_avg (void);
 
 
 #ifdef USERPROG
-   void set_process_status (struct thread *, int);
    void increment_current_file_descriptor (struct thread *);
 #endif
 

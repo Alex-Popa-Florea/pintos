@@ -34,6 +34,7 @@ static bool load (const char *cmdline, void (**eip) (void), void **esp);
   Intialise a global list to store all of the pcbs
 */
 struct list pcb_list = LIST_INITIALIZER (pcb_list); 
+struct lock pcb_list_lock;
 
 tid_t
 process_execute (const char *file_name) 
@@ -52,29 +53,26 @@ process_execute (const char *file_name)
   char *strPointer;
   char *arg1 = strtok_r(str, " ", &strPointer);
 
-  enum intr_level old_level = intr_disable ();
-
   pcb *parent_pcb = get_pcb_from_id (thread_current ()->tid);
+  
   if (parent_pcb == NULL) {
     parent_pcb = (pcb *) malloc (sizeof(pcb));
     init_pcb (parent_pcb, thread_current ()->tid, CHILDLESS_PARENT_ID);
+    lock_acquire(&pcb_list_lock);
     list_push_back (&pcb_list, &parent_pcb->elem);
+    lock_release(&pcb_list_lock);
   }
-
-  intr_set_level (old_level);
-
+  
   tid = thread_create (arg1, PRI_DEFAULT, start_process, fn_copy);
   if (tid == TID_ERROR) 
     palloc_free_page (fn_copy); 
 
-  enum intr_level prev_level = intr_disable ();
-  
   pcb *new_pcb = (pcb *) malloc (sizeof(pcb));
   init_pcb (new_pcb, tid, parent_pcb->id);
- 
+  
+  lock_acquire(&pcb_list_lock);
   list_push_back (&pcb_list, &new_pcb->elem);
-
-  intr_set_level (prev_level);
+  lock_release(&pcb_list_lock);
   return tid;
 }
 
@@ -238,15 +236,19 @@ process_has_child (pcb *parent, pid_t child_id) {
 }
 
 pcb 
-*get_pcb_from_id (tid_t tid) {
+*get_pcb_from_id (tid_t tid) { 
   struct list_elem *e;
+  lock_acquire(&pcb_list_lock);
+
   for (e = list_begin (&pcb_list); e != list_end (&pcb_list); e = list_next (e)) {
     pcb *current_pcb = list_entry (e, pcb, elem);
     if (current_pcb->id == tid) {
+      lock_release(&pcb_list_lock);
       return current_pcb;
     }
   }
-
+  
+  lock_release(&pcb_list_lock);
   return NULL;
 }
 
@@ -254,9 +256,7 @@ int
 process_wait (tid_t child_tid) 
 {
   struct thread *current_thread = thread_current ();
-  enum intr_level old_level = intr_disable ();
   pcb *current_pcb = get_pcb_from_id (current_thread->tid);
-  
   
   if (!process_has_child (current_pcb, child_tid)) {
     return -1;
@@ -278,7 +278,6 @@ process_wait (tid_t child_tid)
   current_pcb->waiting_on = NOT_WAITING;
   int child_exit_status = child_pcb->exit_status;
 
-  intr_set_level (old_level);
   return child_exit_status;
 }
 
@@ -286,9 +285,8 @@ void
 process_exit (void)
 {
   struct thread *cur = thread_current ();
-  enum intr_level old_level = intr_disable ();
   pcb *current_pcb = get_pcb_from_id  (cur->tid);
-  current_pcb->exit_status = cur->process_status;
+  //current_pcb->exit_status = cur->process_status;
   uint32_t *pd;
   
   lock_acquire (&file_system_lock);
@@ -307,7 +305,7 @@ process_exit (void)
   }
   
   lock_release (&file_system_lock);
-
+  lock_acquire(&pcb_list_lock);
   /* When a process exits, free all its child processes which have terminated */
   for (e = list_begin (&pcb_list); e != list_end (&pcb_list);) {
     pcb *child_pcb = list_entry (e, pcb, elem);
@@ -318,12 +316,14 @@ process_exit (void)
     } else {
       e = list_next (e);
     }
-    
   }
+  lock_release(&pcb_list_lock);
 
   pcb *parent_pcb = get_pcb_from_id (current_pcb->parent_id);
   if (parent_pcb == NULL) {
+    lock_acquire(&pcb_list_lock);
     list_remove (&current_pcb->elem);
+    lock_release(&pcb_list_lock);
     free (&current_pcb);
   } else {
     if (current_pcb->id == parent_pcb->waiting_on) {
@@ -331,7 +331,6 @@ process_exit (void)
     }
   }
 
-  intr_set_level (old_level);
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
@@ -712,3 +711,8 @@ install_page (void *upage, void *kpage, bool writable)
           && pagedir_set_page (t->pagedir, upage, kpage, writable));
 }
 
+void 
+set_exit_status (pcb *p, int status) {
+  //printf("Thread %d changed its status from %d to %d\n", t->tid, t->process_status, status);
+  p->exit_status = status;
+}
