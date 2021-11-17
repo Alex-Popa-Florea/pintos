@@ -53,26 +53,10 @@ process_execute (const char *file_name)
   char *strPointer;
   char *arg1 = strtok_r(str, " ", &strPointer);
 
-  //pcb *parent_pcb = get_pcb_from_id (thread_current ()->tid);
-  
-  // if (parent_pcb == NULL) {
-  //   parent_pcb = (pcb *) malloc (sizeof(pcb));
-  //   init_pcb (parent_pcb, thread_current ()->tid, CHILDLESS_PARENT_ID);
-  //   lock_acquire(&pcb_list_lock);
-  //   list_push_back (&pcb_list, &parent_pcb->elem);
-  //   lock_release(&pcb_list_lock);
-  // }
-  //lock_acquire(&pcb_list_lock);
   tid = thread_create (arg1, PRI_DEFAULT, start_process, fn_copy);
   if (tid == TID_ERROR) 
     palloc_free_page (fn_copy); 
 
-  // pcb *new_pcb = (pcb *) malloc (sizeof(pcb));
-  // init_pcb (new_pcb, tid, parent_pcb->id);
-  
-  
-  //list_push_back (&pcb_list, &new_pcb->elem);
-  //lock_release(&pcb_list_lock);
   return tid;
 }
 
@@ -238,17 +222,17 @@ process_has_child (pcb *parent, pid_t child_id) {
 pcb 
 *get_pcb_from_id (tid_t tid) { 
   struct list_elem *e;
-  lock_acquire(&pcb_list_lock);
+  lock_acquire (&pcb_list_lock);
 
   for (e = list_begin (&pcb_list); e != list_end (&pcb_list); e = list_next (e)) {
     pcb *current_pcb = list_entry (e, pcb, elem);
     if (current_pcb->id == tid) {
-      lock_release(&pcb_list_lock);
+      lock_release (&pcb_list_lock);
       return current_pcb;
     }
   }
   
-  lock_release(&pcb_list_lock);
+  lock_release (&pcb_list_lock);
   return NULL;
 }
 
@@ -305,7 +289,7 @@ process_exit (void)
   }
   
   lock_release (&file_system_lock);
-  lock_acquire(&pcb_list_lock);
+  lock_acquire (&pcb_list_lock);
   /* When a process exits, free all its child processes which have terminated */
   for (e = list_begin (&pcb_list); e != list_end (&pcb_list);) {
     pcb *child_pcb = list_entry (e, pcb, elem);
@@ -316,13 +300,13 @@ process_exit (void)
       e = list_next (e);
     }
   }
-  lock_release(&pcb_list_lock);
+  lock_release (&pcb_list_lock);
 
   pcb *parent_pcb = get_pcb_from_id (current_pcb->parent_id);
   if (parent_pcb == NULL) {
-    lock_acquire(&pcb_list_lock);
+    lock_acquire (&pcb_list_lock);
     list_remove (&current_pcb->elem);
-    lock_release(&pcb_list_lock);
+    lock_release (&pcb_list_lock);
     free (&current_pcb);
   } else {
     if (current_pcb->id == parent_pcb->waiting_on) {

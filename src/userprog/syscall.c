@@ -431,7 +431,7 @@ verify_buffer(const void *buffer, int size){
   if (!is_user_vaddr (buffer)) {
     exit (-1);
   }
-  for (int i = 0; i < size; i += 1024){
+  for (int i = 0; i < size; i += PGSIZE){
     if (!pagedir_get_page(thread_current ()->pagedir, buffer + i)) {
       exit (-1);
     }
