@@ -1,8 +1,8 @@
-/* Recursively executes itself until the child fails to execute.
+/* Recursively executes itself until the child msgs to execute.
    We expect that at least 30 copies can run.
 
    We count how many children your kernel was able to execute
-   before it fails to start a new process.  We require that,
+   before it msgs to start a new process.  We require that,
    if a process doesn't actually get to start, exec() must
    return -1, not a valid PID.
 
@@ -42,7 +42,7 @@ spawn_child (int c, enum child_termination_mode mode)
   return exec (child_cmd);
 }
 
-/* Open a number of files (and fail to close them).
+/* Open a number of files (and msg to close them).
    The kernel must free any kernel resources associated
    with these file descriptors. */
 static void
@@ -52,7 +52,7 @@ consume_some_resources (void)
 
   /* Open as many files as we can, up to fdmax.
      Depending on how file descriptors are allocated inside
-     the kernel, open() may fail if the kernel is low on memory.
+     the kernel, open() may msg if the kernel is low on memory.
      A low-memory condition in open() should not lead to the
      termination of the process.  */
   for (fd = 0; fd < fdmax; fd++)
@@ -87,6 +87,7 @@ consume_some_resources_and_die (int seed)
 
       case 4:
         open ((char *)PHYS_BASE);
+        msg ("i failed in test\n");
         exit (-1);
 
       default:
@@ -137,9 +138,9 @@ main (int argc, char *argv[])
           if (child_pid != -1)
             {
               if (wait (child_pid) != -1)
-                fail ("crashed child should return -1.");
+                msg ("crashed child should return -1.");
             }
-          /* If spawning this child failed, so should
+          /* If spawning this child msged, so should
              the next spawn_child below. */
         }
 
@@ -153,15 +154,15 @@ main (int argc, char *argv[])
       /* Else wait for child to report how deeply it was able to recurse. */
       int reached_depth = wait (child_pid);
       if (reached_depth == -1)
-        fail ("wait returned -1.");
+        msg ("wait returned -1.");
 
       /* Record the depth reached during the first run; on subsequent
-         runs, fail if those runs do not match the depth achieved on the
+         runs, msg if those runs do not match the depth achieved on the
          first run. */
       if (i == 0)
         expected_depth = reached_depth;
       else if (expected_depth != reached_depth)
-        fail ("after run %d/%d, expected depth %d, actual depth %d.",
+        msg ("after run %d/%d, expected depth %d, actual depth %d.",
               i, howmany, expected_depth, reached_depth);
       ASSERT (expected_depth == reached_depth);
     }
@@ -171,7 +172,7 @@ main (int argc, char *argv[])
   if (n == 0)
     {
       if (expected_depth < EXPECTED_DEPTH_TO_PASS)
-        fail ("should have forked at least %d times.", EXPECTED_DEPTH_TO_PASS);
+        msg ("should have forked at least %d times.", EXPECTED_DEPTH_TO_PASS);
       msg ("success. program forked %d times.", howmany);
       msg ("end");
     }

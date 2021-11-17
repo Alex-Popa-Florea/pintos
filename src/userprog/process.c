@@ -45,8 +45,10 @@ process_execute (const char *file_name)
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
   fn_copy = palloc_get_page (0); 
-  if (fn_copy == NULL)
+  if (fn_copy == NULL) {
+    printf ("EXITED IN EXECUTE LINE 49\n");
     return TID_ERROR;
+  }
   strlcpy (fn_copy, file_name, PGSIZE);
 
   // Extract the name of the file from the command
@@ -59,9 +61,10 @@ process_execute (const char *file_name)
 
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (arg1, PRI_DEFAULT, start_process, fn_copy);
-  if (tid == TID_ERROR) 
+  if (tid == TID_ERROR) {
+    printf("thread didnt create\n");
     palloc_free_page (fn_copy); 
-
+  }
 
   enum intr_level old_level = intr_disable ();
 
@@ -72,13 +75,17 @@ process_execute (const char *file_name)
   pcb *parent_pcb = get_pcb_from_id (thread_current ()->tid);
   if (parent_pcb == NULL) {
     // Edge case: the first process created has no parent
+      //struct list *pcb_list = malloc (sizeof (struct list));
+      //list_init (pcb_list);
     parent_pcb = (pcb *) malloc (sizeof(pcb));
+    ASSERT(parent_pcb);
     init_pcb (parent_pcb, thread_current ()->tid, CHILDLESS_PARENT_ID);
     list_push_back (&pcb_list, &parent_pcb->elem);
   }
   
   // Initialise a PCB for the new process thread
   pcb *new_pcb = (pcb *) malloc (sizeof(pcb));
+  ASSERT(new_pcb);  
   init_pcb (new_pcb, tid, parent_pcb->id);
  
   // Add PCB to the list of all active PCBs
@@ -138,9 +145,10 @@ start_process (void *file_name_)
 
   palloc_free_page (whole_file);
   /* If load failed, quit. */
-  if (!success) 
+  if (!success) {
+    printf (" Thread %d, i exited line 144\n", thread_current ()->tid);
     exit (-1);
-
+  }
   
   // Setting up the stack 
 
@@ -206,7 +214,9 @@ init_pcb (pcb *pcb, int id, int parent_id) {
   pcb->id = id;
   pcb->parent_id = parent_id;
   pcb->exit_status = PROCESS_UNTOUCHED_STATUS;
-  sema_init (&pcb->sema, 0);
+  pcb->sema = (struct semaphore *) malloc (sizeof (struct semaphore));
+  sema_init (pcb->sema, 0);
+
   pcb->has_been_waited_on = false;
 }
 
@@ -246,10 +256,11 @@ print_pcb_ids (void) {
        e = list_next (e))
     {
       pcb *current_pcb = list_entry (e, pcb, elem);
-      printf ("--PCB ID: %d\n", current_pcb->id);
-      printf ("--PCB PARENT ID: %d\n", current_pcb->parent_id);
-      printf ("--PCB HASBEENWAITEDON: %d\n", current_pcb->has_been_waited_on);
-      printf ("--PCB EXITSTATUS: %d\n", current_pcb->exit_status);
+      printf ("--PCB ID: %d   ", current_pcb->id);
+      printf ("--PCB PARENT ID: %d   ", current_pcb->parent_id);
+      printf ("--PCB HASBEENWAITEDON: %d   ", current_pcb->has_been_waited_on);
+      printf ("--PCB EXITSTATUS: %d   ", current_pcb->exit_status);
+      printf ("\n");
     }
 }
 
@@ -276,12 +287,13 @@ process_wait (tid_t child_tid)
 
   // The thread does not correspond to a child process of the current process
   if (!process_has_child (current_pcb, child_tid)) {
-    //printf("i got here\n");
+    printf("i failed line 283\n");
     return -1;
   }
 
   pcb *child_pcb = get_pcb_from_id (child_tid);
   if (child_pcb->has_been_waited_on) {
+    printf("i failed line 289\n");
     return -1;
   }
 
@@ -290,24 +302,25 @@ process_wait (tid_t child_tid)
 
   // Child process has already terminated
   if (child_pcb->exit_status != PROCESS_UNTOUCHED_STATUS) {
+    printf("i get the status without waiting\n");
     return child_pcb->exit_status;
   }
 
   // Block the current process' thread
   current_pcb->waiting_on = child_tid;
-  sema_down (&current_pcb->sema);
+  sema_down (current_pcb->sema);
 
   // The child process has now terminated, so the current process runs
   child_pcb->has_been_waited_on = true;
+  int child_id = child_pcb->id;
   current_pcb->waiting_on = NOT_WAITING;
   int child_exit_status = child_pcb->exit_status;
-  list_remove (&child_pcb->elem);
-  free (child_pcb);
 
-  //printf("AT THE END OF WAIT FOR THREAD %d, PCBS ARE:\n", thread_current ()->tid);
-  //print_pcb_ids ();
+  // printf("AT THE END OF WAIT FOR THREAD %d, CHILD: %d PCBS ARE:\n", thread_current ()->tid,child_id);
+  // print_pcb_ids ();
 
   intr_set_level (old_level);
+  printf("%d gets status %d, after waiting on %d\n", thread_current ()->tid, child_exit_status, child_id);
   return child_exit_status;
 }
 
@@ -341,22 +354,40 @@ process_exit (void)
   
   lock_release (&file_system_lock);
 
+  printf("AT THE MIDDLE OF EXIT FOR THREAD %d, PCBS ARE:\n", thread_current ()->tid);
+  print_pcb_ids ();
+
+  for (e = list_begin (&pcb_list); e != list_end (&pcb_list);) {
+        pcb *child_pcb = list_entry (e, pcb, elem);
+        ASSERT(current_pcb);
+        if (child_pcb->parent_id == current_pcb->id && child_pcb->exit_status != PROCESS_UNTOUCHED_STATUS)  {
+          e = list_remove (&child_pcb->elem);
+          free (child_pcb->sema);
+          free (child_pcb);
+        } else {
+          e = list_next (e);
+        }
+        
+       }
+
   pcb *parent_pcb = get_pcb_from_id (current_pcb->parent_id);
   //printf("AT THE MIDDLE OF EXIT FOR THREAD %d, PCBS ARE:\n", thread_current ()->tid);
   //print_pcb_ids ();
   if (parent_pcb == NULL) {
     // The parent process has already terminated
     list_remove (&current_pcb->elem);
+    free (current_pcb->sema);
     free (&current_pcb);
   } else {
     // The parent process still exists
     if (current_pcb->id == parent_pcb->waiting_on) {
-      sema_up (&parent_pcb->sema);
+      sema_up (parent_pcb->sema);
     }
   }
 
-  //printf("AT THE END OF EXIT FOR THREAD %d, PCBS ARE:\n", thread_current ()->tid);
-  //print_pcb_ids ();
+  printf("AT THE END OF EXIT FOR THREAD %d, PCBS ARE:\n", current_pcb->id);
+  print_pcb_ids ();
+
   intr_set_level (old_level);
 
   /* Destroy the current process's page directory and switch back
@@ -471,6 +502,7 @@ bool
 load (const char *file_name, void (**eip) (void), void **esp) 
 {
   struct thread *t = thread_current ();
+  printf ("Loading Thread %d\n", t->tid);
   struct Elf32_Ehdr ehdr;
   struct file *file = NULL;
   off_t file_ofs;
@@ -481,8 +513,10 @@ load (const char *file_name, void (**eip) (void), void **esp)
 
   /* Allocate and activate page directory. */
   t->pagedir = pagedir_create ();
-  if (t->pagedir == NULL) 
+  if (t->pagedir == NULL) {
+    printf ("Thread %d's load failed at pagedir 517\n", t->tid);
     goto done;
+  }
   process_activate ();
 
   /* Open executable file. */
@@ -514,12 +548,16 @@ load (const char *file_name, void (**eip) (void), void **esp)
     {
       struct Elf32_Phdr phdr;
 
-      if (file_ofs < 0 || file_ofs > file_length (file))
+      if (file_ofs < 0 || file_ofs > file_length (file)) {
+        printf ("Thread %d's load failed at 552\n", t->tid);
         goto done;
+      }
       file_seek (file, file_ofs);
 
-      if (file_read (file, &phdr, sizeof phdr) != sizeof phdr)
+      if (file_read (file, &phdr, sizeof phdr) != sizeof phdr) {
+        printf ("Thread %d's load failed at 558\n", t->tid);
         goto done;
+      }
       file_ofs += sizeof phdr;
       switch (phdr.p_type) 
         {
@@ -533,6 +571,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
         case PT_DYNAMIC:
         case PT_INTERP:
         case PT_SHLIB:
+          printf ("Thread %d's load failed at 574\n", t->tid);
           goto done;
         case PT_LOAD:
           if (validate_segment (&phdr, file)) 
@@ -558,18 +597,24 @@ load (const char *file_name, void (**eip) (void), void **esp)
                   zero_bytes = ROUND_UP (page_offset + phdr.p_memsz, PGSIZE);
                 }
               if (!load_segment (file, file_page, (void *) mem_page,
-                                 read_bytes, zero_bytes, writable))
+                                 read_bytes, zero_bytes, writable)) {
+                                   printf ("Thread %d's load failed at 601\n", t->tid);
                 goto done;
+                                 }
             }
-          else
+          else {
+            printf ("Thread %d's load failed at 606\n", t->tid);
             goto done;
+          }
           break;
         }
     }
 
   /* Set up stack. */
-  if (!setup_stack (esp))
+  if (!setup_stack (esp)) {
+    printf ("Thread %d's load failed at setup stack 615\n", t->tid);
     goto done;
+  }
 
   /* Start address. */
   *eip = (void (*) (void)) ehdr.e_entry;

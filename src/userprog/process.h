@@ -25,7 +25,7 @@ typedef struct {
     int waiting_on;                 // Id of the child process that a parent process waits on
     struct list_elem elem;          // Elem to insert pcb into a list
     int exit_status;                // Status of the process
-    struct semaphore sema;          // Semaphore used to block the thread of the corresponding process
+    struct semaphore *sema;          // Semaphore used to block the thread of the corresponding process
     bool has_been_waited_on;        // Boolean to track if a wait has already been called on the process
 } pcb;
 

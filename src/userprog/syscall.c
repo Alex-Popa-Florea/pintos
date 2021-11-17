@@ -90,6 +90,7 @@ halt (void) {
 
 static void 
 exit_wrapper (int *addr) {
+  printf ("i called exit wrapper\n");
   exit ((int) *(addr + 1));
 }
 
@@ -109,6 +110,7 @@ exec (const char *cmd_line) {
   verify_address (cmd_line);
   //printf ("I called exec with %s\n", cmd_line);
   if (!cmd_line) {
+    printf("i crashed at 112 :(\n");
     return -1;
   } 
   
@@ -123,13 +125,14 @@ exec (const char *cmd_line) {
 
   if (!is_filename_valid (file_name)) {
     lock_release (&file_system_lock);
+    printf("i crashed at 127 :(\n");
     return -1;
   }
 
   lock_release (&file_system_lock);
   pid_t new_process_pid = process_execute (cmd_line);
 
-
+  printf ("the id after exec is: %d\n", new_process_pid);
   return new_process_pid;
 
 }
@@ -189,18 +192,19 @@ open (const char *file) {
   struct file *new_file = filesys_open (file);
   if (new_file == NULL) {
     lock_release (&file_system_lock);
+    printf ("i crashed in open at line 194\n");
     return -1;
   }
 
 
   // Initialise a process file mapping the file pointer to the file descriptor
-  process_file *process_file = malloc (sizeof (process_file));   // ?? is malloc needed or is this file ??
-  process_file->file = new_file;
+  process_file *new_process_file = (process_file *) malloc (sizeof (process_file));   
+  new_process_file->file = new_file;
   int file_descriptor = thread_current ()->current_file_descriptor;
-  process_file->file_descriptor = file_descriptor;
+  new_process_file->file_descriptor = file_descriptor;
 
   increment_current_file_descriptor (thread_current ());
-  list_push_front (&thread_current ()->file_list, &process_file->file_elem);
+  list_push_front (&thread_current ()->file_list, &new_process_file->file_elem);
 
   lock_release (&file_system_lock);
 
@@ -225,7 +229,9 @@ filesize (int fd) {
   }
 
   lock_release (&file_system_lock);
-
+  if  (file_size == -1) {
+    printf ("i crashed in filesize at line 232\n");
+  }
   return file_size;
 }
 
@@ -252,6 +258,10 @@ read (int fd, void *buffer, unsigned size) {
   }
 
   lock_release (&file_system_lock);
+
+  if  (bytes_read == -1) {
+    printf ("i crashed in byteread at line 262\n");
+  }
 
   return bytes_read;
 }
@@ -373,11 +383,11 @@ file_finder (int fd) {
 void 
 verify_address (const void *vaddr) {
   if (!is_user_vaddr (vaddr)) {
-    //printf ("Vaddr failed\n");
+    printf ("Vaddr failed\n");
     exit (-1);
   }
   if (!pagedir_get_page(thread_current ()->pagedir, vaddr)) {
-    //printf ("Pagedir failed\n");
+    printf ("Pagedir failed\n");
     exit (-1);
   }
   //printf ("Passed argument verification\n");
