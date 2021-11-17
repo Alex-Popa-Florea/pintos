@@ -146,19 +146,12 @@ start_process (void *file_name_)
 
   pcb *parent_pcb = get_pcb_from_id (thread_current ()->parent_id);
   parent_pcb->load_process_success = success;
-  int old_load_status = parent_pcb->child_load_status;
-  parent_pcb->child_load_status = 2;
-  if (old_load_status == 1) {
-    sema_up (&parent_pcb->load_sema);
-  }
+  sema_up (&parent_pcb->load_sema);
 
-  
-    
   /* If load failed, quit. */
   if (!success) 
     exit (-1);
 
-  
   // Setting up the stack 
 
   /*
@@ -226,7 +219,6 @@ init_pcb (pcb *pcb, int id, int parent_id) {
   pcb->has_been_waited_on = false;
   pcb->load_process_success = false;
   sema_init (&pcb->load_sema, 0);
-  pcb->child_load_status = 0;
 }
 
 

@@ -28,10 +28,8 @@ typedef struct {
     int waiting_on;                 /* Id of the child process that a parent process waits on */
     bool has_been_waited_on;        /* Boolean to track if a wait has already been called on the process */
     struct semaphore wait_sema;     /* Semaphore used to block a process when it waits on its child process */
-
     bool load_process_success;      /* Flag to indicate success of loading a process from an executable */
     struct semaphore load_sema;     /* Semaphore to block a process while it loads a child */
-    int child_load_status;          /* 0: default, 1: waiting for child to load, 2: child has loaded */
 } pcb;
 
 

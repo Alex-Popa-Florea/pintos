@@ -135,18 +135,14 @@ exec (const char *cmd_line) {
   // Block the current process until it knows the success of the child process load
   pcb *current_pcb = get_pcb_from_id (thread_current ()->tid);
   pid_t new_process_pid = process_execute (cmd_line);
-  if (current_pcb->child_load_status == 0) {
-    current_pcb->child_load_status = 1;
-    sema_down (&current_pcb->load_sema);
-  }
-  current_pcb->child_load_status = 0;
+
+  sema_down (&current_pcb->load_sema);
   
   if (current_pcb->load_process_success) {
     return new_process_pid;
   } else {
     return -1;
   }
-
 
 }
 
