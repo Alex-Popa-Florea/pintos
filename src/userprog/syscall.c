@@ -195,13 +195,13 @@ open (const char *file) {
 
 
   // Initialise a process file mapping the file pointer to the file descriptor
-  process_file *process_file = malloc (sizeof (process_file));   // ?? is malloc needed or is this file ??
-  process_file->file = new_file;
+  process_file *new_process_file = malloc (sizeof (process_file));   // ?? is malloc needed or is this file ??
+  new_process_file->file = new_file;
   int file_descriptor = thread_current ()->current_file_descriptor;
-  process_file->file_descriptor = file_descriptor;
+  new_process_file->file_descriptor = file_descriptor;
 
   increment_current_file_descriptor (thread_current ());
-  list_push_front (&thread_current ()->file_list, &process_file->file_elem);
+  list_push_front (&thread_current ()->file_list, &new_process_file->file_elem);
 
   lock_release (&file_system_lock);
 

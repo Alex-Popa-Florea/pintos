@@ -302,8 +302,8 @@ process_wait (tid_t child_tid)
   child_pcb->has_been_waited_on = true;
   current_pcb->waiting_on = NOT_WAITING;
   int child_exit_status = child_pcb->exit_status;
-  list_remove (&child_pcb->elem);
-  free (child_pcb);
+  // list_remove (&child_pcb->elem);
+  // free (child_pcb);
 
   //printf("AT THE END OF WAIT FOR THREAD %d, PCBS ARE:\n", thread_current ()->tid);
   //print_pcb_ids ();
@@ -341,6 +341,18 @@ process_exit (void)
   }
   
   lock_release (&file_system_lock);
+
+  for (e = list_begin (&pcb_list); e != list_end (&pcb_list);) {
+    pcb *child_pcb = list_entry (e, pcb, elem);
+    ASSERT(current_pcb);
+    if (child_pcb->parent_id == current_pcb->id && child_pcb->exit_status != PROCESS_UNTOUCHED_STATUS)  {
+      e = list_remove (&child_pcb->elem);
+      free (child_pcb);
+    } else {
+      e = list_next (e);
+    }
+    
+  }
 
   pcb *parent_pcb = get_pcb_from_id (current_pcb->parent_id);
   //printf("AT THE MIDDLE OF EXIT FOR THREAD %d, PCBS ARE:\n", thread_current ()->tid);
