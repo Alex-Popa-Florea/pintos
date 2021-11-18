@@ -78,6 +78,10 @@ process_execute (const char *file_name)
   return tid;
 }
 
+static bool check_stack_overflow (void *esp, unsigned long dcr) {
+  return ((int *) esp - dcr) > 0;
+}
+
 /*  
   A thread function that loads a user process and starts it running.
 */
@@ -131,43 +135,78 @@ start_process (void *file_name_)
 
   /* Add parsed arguments to stack */
   char *argv_ptrs[argc];
+  unsigned long dcr = 0;
 
   for (int i = argc - 1; i >= 0; i--) {
-    if_.esp = if_.esp - sizeof (char) * (strlen (argv[i]) + 1);
-    strlcpy (if_.esp, argv[i], sizeof (char) * (strlen (argv[i]) + 1));
-    argv_ptrs[i] = if_.esp;
+    dcr = sizeof (char) * (strlen (argv[i]) + 1);
+    if (check_stack_overflow (if_.esp, dcr)) {
+      if_.esp = if_.esp - dcr;
+      strlcpy (if_.esp, argv[i], sizeof (char) * (strlen (argv[i]) + 1));
+      argv_ptrs[i] = if_.esp;
+    } else {
+      exit (-1);
+    }
   }
 
   /* Add word align buffer to the stack */
-  if_.esp = if_.esp - sizeof (uint8_t);
-  uint8_t word_align = 0;
-  *(uint8_t *)(if_.esp) = word_align;
-  
+  dcr = sizeof (uint8_t);
+  if (check_stack_overflow (if_.esp, dcr)) {
+    if_.esp = if_.esp - dcr;
+    uint8_t word_align = 0;
+    *(uint8_t *)(if_.esp) = word_align;
+  } else {
+    exit (-1);
+  }
+
   /* Adds null pointer sentinel to the stack */
-  if_.esp = if_.esp - sizeof (char *);
-  (*(char *)(if_.esp)) = 0; 
+  dcr = sizeof (char *);
+  if (check_stack_overflow (if_.esp, dcr)) {
+    if_.esp = if_.esp - dcr;
+    (*(char *)(if_.esp)) = 0; 
+  } else {
+    exit (-1);
+  }
   
   
   /* Adds addresses of arguments to stack */
   for (int j = argc - 1; j >= 0; j--) {
-    if_.esp = if_.esp - sizeof (char *);
-    *(char **)(if_.esp) = argv_ptrs[j];
+    dcr = sizeof (char *);
+
+    if (check_stack_overflow (if_.esp, dcr)) {
+      if_.esp = if_.esp - dcr;
+      *(char **)(if_.esp) = argv_ptrs[j];
+    } else {
+      exit (-1);
+    }
   }
   
   /* Adds pointer to the start of argument array to stack */
-  if_.esp = if_.esp - sizeof (char **);
-  char **argv_ptr = if_.esp + sizeof (char **);
-  *(char ***)(if_.esp) = argv_ptr;
-  
+  dcr = sizeof (char **);
+  if (check_stack_overflow (if_.esp, dcr)) {
+    if_.esp = if_.esp - dcr;
+    char **argv_ptr = if_.esp + sizeof (char **);
+    *(char ***)(if_.esp) = argv_ptr;
+  } else {
+    exit (-1);
+  }
 
   /* Adds number of arguments to stack */
-  if_.esp = if_.esp - sizeof (int);
-  (*(int *)(if_.esp)) = argc;
+  dcr = sizeof (int);
+  if (check_stack_overflow (if_.esp, dcr)) {
+    if_.esp = if_.esp - dcr;
+    (*(int *)(if_.esp)) = argc;
+  } else {
+    exit (-1);
+  }
   
   
   /* Adds return address to stack */
-  if_.esp = if_.esp - sizeof (int);
-  (*(int *)(if_.esp)) = 0;  
+  if (check_stack_overflow (if_.esp, dcr)) {
+    if_.esp = if_.esp - dcr;
+    (*(int *)(if_.esp)) = 0;  
+  } else {
+    exit (-1);
+  }
 
   asm volatile ("movl %0, %%esp; jmp intr_exit" : : "g" (&if_) : "memory");
   NOT_REACHED ();
