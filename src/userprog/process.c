@@ -25,32 +25,33 @@
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 
-/* Limit on size of command-line arguments (bytes) */
+/* 
+  Limit on size of command-line arguments (bytes) 
+*/
 #define COMMAND_LINE_LIMIT (128)
 
-struct list pcb_list = LIST_INITIALIZER (pcb_list); // Initialise a list to store all PCBs
-//extern struct lock file_system_lock; // Use the same global file system lock as defined in userprog/syscall.c
+/*
+  Intialise a global list to store all of the pcbs
+*/
+struct list pcb_list = LIST_INITIALIZER (pcb_list); 
 
-
-/* Starts a new thread running a user program loaded from
-   FILENAME.  The new thread may be scheduled (and may even exit)
-   before process_execute() returns.  Returns the new process's
-   thread id, or TID_ERROR if the thread cannot be created. */
+/* 
+  Starts a new thread running a user program loaded from
+  FILENAME.  The new thread may be scheduled (and may even exit)
+  before process_execute() returns.  Returns the new process's
+  thread id, or TID_ERROR if the thread cannot be created. 
+*/
 tid_t
 process_execute (const char *file_name) 
 {
   char *fn_copy;
   tid_t tid;
-  //printf("Filename file_name? : %s\n", file_name);
 
-  /* Make a copy of FILE_NAME.
-     Otherwise there's a race between the caller and load(). */
   fn_copy = palloc_get_page (0); 
   if (fn_copy == NULL)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
 
-  // Extract the name of the file from the command
   int command_size = strlen(file_name) + 1;
   char str[command_size];
   strlcpy (str, file_name, command_size);
@@ -58,46 +59,31 @@ process_execute (const char *file_name)
   char *arg1 = strtok_r(str, " ", &strPointer);
 
 
-  // Obtain the pcb of the parent process
   pcb *parent_pcb = get_pcb_from_id (thread_current ()->tid);
   if (parent_pcb == NULL) {
-    // Edge case: the first process created has no parent
     parent_pcb = (pcb *) malloc (sizeof(pcb));
     init_pcb (parent_pcb, thread_current ()->tid, CHILDLESS_PARENT_ID);
     list_push_back (&pcb_list, &parent_pcb->elem);
   }
 
-
-  /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (arg1, PRI_DEFAULT, start_process, fn_copy);
   if (tid == TID_ERROR) 
     palloc_free_page (fn_copy); 
 
   enum intr_level old_level = intr_disable ();
-
-
-  //printf("AT THE START OF EXECUTE FOR THREAD %d, PCBS ARE:\n", thread_current ()->tid);
-  //print_pcb_ids ();
-
   
-  
-  // Initialise a PCB for the new process thread
   pcb *new_pcb = (pcb *) malloc (sizeof(pcb));
   init_pcb (new_pcb, tid, parent_pcb->id);
  
-  // Add PCB to the list of all active PCBs
   list_push_back (&pcb_list, &new_pcb->elem);
 
-  //printf("AT THE END OF EXECUTE FOR THREAD %d, PCBS ARE:\n", thread_current ()->tid);
-  //print_pcb_ids();
-
-  // Unblock parent process
   intr_set_level (old_level);
   return tid;
 }
 
-/* A thread function that loads a user process and starts it
-   running. */
+/* 
+  A thread function that loads a user process and starts it running.
+*/
 static void
 start_process (void *file_name_)
 {
@@ -111,24 +97,17 @@ start_process (void *file_name_)
   char str[file_size];
   strlcpy (str, whole_file, file_size);
   
-  /*
-    argv - array used to store command line arguments. 
-    Assuming the maxium number of arguments is COMMAND_LINE_LIMIT / 2
-      - each argument a character long separated by whitespace
-  */
   int limit = COMMAND_LINE_LIMIT / 2;
+  /* Array used to store command line arguments. */
   char *argv[limit];
 
-  /* 
-    argc - stores the number of command line arguments
-  */
+  /* Records the number of command line arguments */
   int argc = 0; 
 
   token = strtok_r (str, " ", &save_ptr);
   char *file_name = token;
 
   while (token != NULL && argc < limit) {
-    //printf("Tokenised arg (start_process)? : %s\n", token);
     argv[argc] = token;
     argc++;
     token = strtok_r (NULL, " ", &save_ptr);
@@ -148,15 +127,12 @@ start_process (void *file_name_)
   parent_pcb->load_process_success = success;
   sema_up (&parent_pcb->load_sema);
 
-  /* If load failed, quit. */
   if (!success) 
     thread_exit ();
 
-  // Setting up the stack 
+  /* Set up the stack with the tokenised arguments */
 
-  /*
-    Adding the parsed arguments to stack
-  */
+  /* Add parsed arguments to stack */
   char *argv_ptrs[argc];
 
   for (int i = argc - 1; i >= 0; i--) {
@@ -165,51 +141,44 @@ start_process (void *file_name_)
     argv_ptrs[i] = if_.esp;
   }
 
-  // Adds word align buffer to the stack
+  /* Add word align buffer to the stack */
   if_.esp = if_.esp - sizeof (uint8_t);
   uint8_t word_align = 0;
   *(uint8_t *)(if_.esp) = word_align;
   
-  // Adds null pointer sentinel to the stack
+  /* Adds null pointer sentinel to the stack */
   if_.esp = if_.esp - sizeof (char *);
   (*(char *)(if_.esp)) = 0; 
   
   
-  // Adds addresses of arguments to stack
+  /* Adds addresses of arguments to stack */
   for (int j = argc - 1; j >= 0; j--) {
     if_.esp = if_.esp - sizeof (char *);
     *(char **)(if_.esp) = argv_ptrs[j];
   }
   
-  // Adds pointer to the start of argument array to stack
+  /* Adds pointer to the start of argument array to stack */
   if_.esp = if_.esp - sizeof (char **);
   char **argv_ptr = if_.esp + sizeof (char **);
   *(char ***)(if_.esp) = argv_ptr;
   
 
-  // Adds number of arguments to stack
+  /* Adds number of arguments to stack */
   if_.esp = if_.esp - sizeof (int);
   (*(int *)(if_.esp)) = argc;
   
   
-  // Adds return address to stack
+  /* Adds return address to stack */
   if_.esp = if_.esp - sizeof (int);
   (*(int *)(if_.esp)) = 0;  
 
-
-  //hex_dump(if_.esp, if_.esp, PHYS_BASE - if_.esp, 1);
-
-  /* Start the user process by simulating a return from an
-     interrupt, implemented by intr_exit (in
-     threads/intr-stubs.S).  Because intr_exit takes all of its
-     arguments on the stack in the form of a `struct intr_frame',
-     we just point the stack pointer (%esp) to our stack frame
-     and jump to it. */
   asm volatile ("movl %0, %%esp; jmp intr_exit" : : "g" (&if_) : "memory");
   NOT_REACHED ();
 }
 
-
+/*
+    Initialises a PCB with its id and parent id
+*/
 void 
 init_pcb (pcb *pcb, int id, int parent_id) {
   pcb->id = id;
@@ -221,12 +190,17 @@ init_pcb (pcb *pcb, int id, int parent_id) {
   sema_init (&pcb->load_sema, 0);
 }
 
-
+/* 
+  Records the id of the child process that a parent process waits on
+*/
 void
 pcb_set_waiting_on (pcb *pcb, int waiting_on) {
   pcb->waiting_on = waiting_on;
 }
 
+/*
+  Returns true if the process has another process as its child
+*/
 bool 
 process_has_child (pcb *parent, pid_t child_id) {
   pcb *child_pcb = get_pcb_from_id (child_id);
@@ -236,6 +210,9 @@ process_has_child (pcb *parent, pid_t child_id) {
   return parent->id == child_pcb->parent_id;
 }
 
+/*
+  Returns a pointer to the pcb corresponding to an id, NULL if there is no match
+*/
 pcb 
 *get_pcb_from_id (tid_t tid) {
   struct list_elem *e;
@@ -249,48 +226,23 @@ pcb
   return NULL;
 }
 
-
-void
-print_pcb_ids (void) {
-  struct list_elem *e;
-
-  for (e = list_begin (&pcb_list); e != list_end (&pcb_list);
-       e = list_next (e))
-    {
-      pcb *current_pcb = list_entry (e, pcb, elem);
-      printf ("--PCB ID: %d\n", current_pcb->id);
-      printf ("--PCB PARENT ID: %d\n", current_pcb->parent_id);
-      printf ("--PCB HASBEENWAITEDON: %d\n", current_pcb->has_been_waited_on);
-      printf ("--PCB EXITSTATUS: %d\n", current_pcb->exit_status);
-    }
-}
-
-
-
-
-/* Waits for thread TID to die and returns its exit status. 
- * If it was terminated by the kernel (i.e. killed due to an exception), 
- * returns -1.  
- * If TID is invalid or if it was not a child of the calling process, or if 
- * process_wait() has already been successfully called for the given TID, 
- * returns -1 immediately, without waiting.
- * 
- * This function will be implemented in task 2.
- * For now, it does nothing. */
+/* 
+  Waits for thread TID to die and returns its exit status. 
+  If it was terminated by the kernel (i.e. killed due to an exception), 
+  returns -1.  
+  If TID is invalid or if it was not a child of the calling process, or if 
+  process_wait() has already been successfully called for the given TID, 
+  returns -1 immediately, without waiting.
+*/
 int
 process_wait (tid_t child_tid) 
 {
   struct thread *current_thread = thread_current ();
   enum intr_level old_level = intr_disable ();
-  //printf("AT THE START OF WAIT FOR THREAD %d, PCBS ARE:\n", thread_current ()->tid);
-  //print_pcb_ids ();
   pcb *current_pcb = get_pcb_from_id (current_thread->tid);
   
   
-
-  // The thread does not correspond to a child process of the current process
   if (!process_has_child (current_pcb, child_tid)) {
-    //printf("i got here\n");
     return -1;
   }
 
@@ -298,42 +250,29 @@ process_wait (tid_t child_tid)
   if (child_pcb->has_been_waited_on) {
     return -1;
   }
-  // The child process has now terminated, so the current process runs
   child_pcb->has_been_waited_on = true;
 
-
-
-  //printf("AT THE MIDDLE OF WAIT FOR THREAD %d, PCBS ARE:\n", thread_current ()->tid);
-  //print_pcb_ids ();
-
-  // Child process has already terminated
   if (child_pcb->exit_status != PROCESS_UNTOUCHED_STATUS) {
     return child_pcb->exit_status;
   }
 
-  // Block the current process' thread
   current_pcb->waiting_on = child_tid;
   sema_down (&current_pcb->wait_sema);
 
   current_pcb->waiting_on = NOT_WAITING;
   int child_exit_status = child_pcb->exit_status;
 
-  //printf("AT THE END OF WAIT FOR THREAD %d, PCBS ARE:\n", thread_current ()->tid);
-  //print_pcb_ids ();
-
   intr_set_level (old_level);
   return child_exit_status;
 }
 
 
-/* Free the current process's resources. */
+/* Frees the current process's resources. */
 void
 process_exit (void)
 {
   struct thread *cur = thread_current ();
   enum intr_level old_level = intr_disable ();
-  //printf("AT THE START OF EXIT FOR THREAD %d, PCBS ARE:\n", thread_current ()->tid);
-  //print_pcb_ids ();
   pcb *current_pcb = get_pcb_from_id  (cur->tid);
   current_pcb->exit_status = cur->process_status;
   uint32_t *pd;
@@ -355,7 +294,7 @@ process_exit (void)
   
   lock_release (&file_system_lock);
 
-  // When a process exits, free all its child processes which have terminated
+  /* When a process exits, free all its child processes which have terminated */
   for (e = list_begin (&pcb_list); e != list_end (&pcb_list);) {
     pcb *child_pcb = list_entry (e, pcb, elem);
     ASSERT(current_pcb);
@@ -369,21 +308,15 @@ process_exit (void)
   }
 
   pcb *parent_pcb = get_pcb_from_id (current_pcb->parent_id);
-  //printf("AT THE MIDDLE OF EXIT FOR THREAD %d, PCBS ARE:\n", thread_current ()->tid);
-  //print_pcb_ids ();
   if (parent_pcb == NULL) {
-    // The parent process has already terminated
     list_remove (&current_pcb->elem);
     free (&current_pcb);
   } else {
-    // The parent process still exists
     if (current_pcb->id == parent_pcb->waiting_on) {
       sema_up (&parent_pcb->wait_sema);
     }
   }
 
-  //printf("AT THE END OF EXIT FOR THREAD %d, PCBS ARE:\n", thread_current ()->tid);
-  //print_pcb_ids ();
   intr_set_level (old_level);
 
   /* Destroy the current process's page directory and switch back
@@ -519,8 +452,6 @@ load (const char *file_name, void (**eip) (void), void **esp)
       printf ("load: %s: open failed\n", file_name);
       goto done; 
     }
-  
-  //file_deny_write (file);
 
   /* Read and verify executable header. */
   if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
@@ -609,7 +540,6 @@ load (const char *file_name, void (**eip) (void), void **esp)
     file_close (file);
   }
   if (success) {
-    //printf("denied\n");
     t->executable_file = file;
     file_deny_write (file);
   }

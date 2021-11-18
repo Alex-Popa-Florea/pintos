@@ -33,31 +33,9 @@ typedef struct {
 } pcb;
 
 
-/*
-    Initialises a PCB with its id and parent id
-*/
 void init_pcb (pcb *, int, int);
-
-
-/*
-    Returns true if the process has another process as its child
-*/
-bool process_has_child (pcb *parent, pid_t child_id);
-
-
-/*
-    Sets the id of the child process a parent waits on
-*/
 void pcb_set_waiting_on (pcb *, int);
-
-
-/*
-    Returns a pointer to the pcb corresponding to an id, NULL if there is no match
-*/
+bool process_has_child (pcb *parent, pid_t child_id);
 pcb *get_pcb_from_id (tid_t);
-
-
-void print_pcb_ids (void);
-
 
 #endif /* userprog/process.h */

@@ -16,17 +16,18 @@
 #include "threads/malloc.h"
 #include "lib/user/syscall.h"
 
-extern struct list pcb_list; // List of all pcbs as defined in process.c
+/* List of all pcbs as defined in process.c */
+extern struct list pcb_list;
 
-struct lock file_system_lock; // Lock to ensure only one process can access file system at once
+/* Lock that ensures only one process can access file system at once */
+struct lock file_system_lock; 
 
 /* Array storing information about each system call function */
 static syscall_func_info syscall_arr[NUM_SYSCALLS];
 
-static void syscall_arr_setup(void);
 static void syscall_handler (struct intr_frame *);
+static void syscall_arr_setup (void);
 
-/* Wrapper functions for all system call functions */
 static void halt_wrapper (void);
 static void exit_wrapper (int *);
 static void exec_wrapper (uint32_t *, int *);
@@ -50,12 +51,11 @@ syscall_init (void)
 }
 
 /*
-  Calls the function corresponding to the system call calling the handler
+  Executes the function corresponding to the system call calling the handler
 */
 static void
 syscall_handler (struct intr_frame *f) 
 {
-  //printf ("I called the syscall handler\n");
   int *addr = f->esp;
   verify_address (addr);
   int system_call = *addr;
@@ -81,21 +81,33 @@ syscall_handler (struct intr_frame *f)
   }
 }
 
+/* 
+  Wrapper function to execute halt() system call 
+*/
 static void 
 halt_wrapper (void) {
   halt ();
 }
-
+ 
+/* 
+  System call that terminates Pintos 
+*/ 
 void
 halt (void) {
   shutdown_power_off ();
 }
 
+/* 
+  Wrapper function to execute exit() system call 
+*/
 static void 
 exit_wrapper (int *addr) {
   exit ((int) *(addr + 1));
 }
 
+/* 
+  System call that terminates curret user program 
+*/ 
 void 
 exit (int status) {
   set_process_status (thread_current (), status);
@@ -103,36 +115,26 @@ exit (int status) {
   thread_exit ();
 }
 
+/* 
+  Wrapper function to execute exec() system call 
+*/
 static void 
 exec_wrapper (uint32_t *eax , int *addr) {
   *eax = exec ((const char *) *(addr + 1));
 }
 
+/* 
+  System call that runs the executable given in cmd_line. 
+  Returns new process's pid.
+*/ 
 pid_t 
 exec (const char *cmd_line) {
   verify_address (cmd_line);
-  //printf ("I called exec with %s\n", cmd_line);
   if (!cmd_line) {
     return -1;
   } 
-  
-  // lock_acquire (&file_system_lock);
 
-  // // Extract the name of the file from the command
-  // int command_size = strlen(cmd_line) + 1;
-  // char str[command_size];
-  // strlcpy (str, cmd_line, command_size);
-  // char *strPointer;
-  // char *file_name = strtok_r(str, " ", &strPointer);
-
-  // if (!is_filename_valid (file_name)) {
-  //   lock_release (&file_system_lock);
-  //   return -1;
-  // }
-
-  // lock_release (&file_system_lock);
-
-  // Block the current process until it knows the success of the child process load
+  /* Block the current process until it knows the success of the child process load */
   pcb *current_pcb = get_pcb_from_id (thread_current ()->tid);
   pid_t new_process_pid = process_execute (cmd_line);
 
@@ -146,56 +148,80 @@ exec (const char *cmd_line) {
 
 }
 
+/* 
+  Wrapper function to execute wait() system call 
+*/
 static void 
 wait_wrapper (uint32_t *eax, int *addr) {
   *eax = wait ((pid_t) *(addr + 1));
 }
 
+/* 
+  System call that waits for a child process pid. 
+  Returns the child’s exit status.
+*/ 
 int 
 wait (pid_t pid) {
-  //printf ("I called wait\n");
   return process_wait (pid);
 }
 
+/* 
+  Wrapper function to execute create() system call 
+*/
 static void 
 create_wrapper (uint32_t *eax, int *addr) {
   *eax = create ((const char *) *(addr + 1), (unsigned) *(addr + 2));
 }
 
+/* 
+  System call that creates a new file of intial size initial_size.
+  Returns true if successful, false otherwise
+*/
 bool 
 create (const char *file, unsigned initial_size) {
   verify_address (file);
-  //printf ("I called create with %s, %d\n", file, initial_size);
   lock_acquire (&file_system_lock);
   bool success = filesys_create (file, initial_size);
   lock_release (&file_system_lock);
   return success;
 }
 
+/* 
+  Wrapper function to execute remove() system call 
+*/
 static void
 remove_wrapper (uint32_t *eax, int *addr) {
   *eax = remove ((const char *) *(addr + 1));
 }
 
+/* 
+  System call that deletes given file. 
+  Returns true if successful, false otherwise.
+*/
 bool
 remove (const char *file) {
   verify_address (file);
-  //printf ("I called remove with %s\n", file);
   lock_acquire (&file_system_lock);
   bool success = filesys_remove (file);
   lock_release (&file_system_lock);
   return success;
 }
 
+/* 
+  Wrapper function to execute open() system call 
+*/
 static void 
 open_wrapper (uint32_t *eax, int *addr) {
   *eax = open ((const char *) *(addr + 1));
 }
 
+/* 
+  System call that opens the given file.
+  Returns the file's file descriptor if successful, otherwise -1 
+*/
 int 
 open (const char *file) {
   verify_address (file);
-  //printf ("I called open with %s\n", file);
   lock_acquire (&file_system_lock);
 
   struct file *new_file = filesys_open (file);
@@ -205,8 +231,10 @@ open (const char *file) {
   }
 
 
-  // Initialise a process file mapping the file pointer to the file descriptor
-  process_file *new_process_file = malloc (sizeof (process_file));   // ?? is malloc needed or is this file ??
+  /*
+    Initialise a process file, mapping the file pointer to the file descriptor
+  */
+  process_file *new_process_file = malloc (sizeof (process_file));   
   new_process_file->file = new_file;
   int file_descriptor = thread_current ()->current_file_descriptor;
   new_process_file->file_descriptor = file_descriptor;
@@ -219,19 +247,24 @@ open (const char *file) {
   return file_descriptor;
 }
 
+/* 
+  Wrapper function to execute filesize() system call 
+*/
 static void 
 filesize_wrapper (uint32_t *eax, int *addr) {
   *eax = filesize ((int) *(addr + 1));
 }
 
+/* 
+  System call that returns the size (bytes) of file open as fd
+*/
 int 
 filesize (int fd) {
-  //printf ("I called filesize with %d\n", fd);
   lock_acquire (&file_system_lock);
 
   int file_size = -1;
 
-  process_file *process_file = file_finder (fd);
+  process_file *process_file = find_file (fd);
   if (process_file) {
     file_size = file_length (process_file->file);
   }
@@ -241,15 +274,21 @@ filesize (int fd) {
   return file_size;
 }
 
+/* 
+  Wrapper function to execute read() system call 
+*/
 static void
 read_wrapper (uint32_t *eax, int *addr) {
   *eax = read ((int) *(addr + 1), (void *) *(addr + 2), (unsigned) *(addr + 3));
 }
 
+/* 
+  System call that reads size bytes from file open as fd into buffer.
+  Returns number of bytes read, or -1 if unsuccessful.
+*/
 int 
 read (int fd, void *buffer, unsigned size) {
   verify_address (buffer);
-  //printf ("I called read with %d, %s, %d\n", fd, buffer, size);
   if (fd == 0) {
     return input_getc ();
   }
@@ -258,7 +297,7 @@ read (int fd, void *buffer, unsigned size) {
 
   int bytes_read = -1;
 
-  process_file *process_file = file_finder (fd);
+  process_file *process_file = find_file (fd);
   if (process_file) {
     bytes_read = file_read (process_file->file, buffer, size);
   }
@@ -268,15 +307,21 @@ read (int fd, void *buffer, unsigned size) {
   return bytes_read;
 }
 
+/* 
+  Wrapper function to execute write() system call 
+*/
 static void
 write_wrapper (uint32_t *eax, int *addr) {
   *eax = write ((int) *(addr + 1), (const void *) *(addr + 2), (unsigned) *(addr + 3));
 }
 
+/* 
+  System call that writes size bytes from buffer into file open as fd.
+  Returns number of bytes written, or 0 if unsuccessful.
+*/
 int 
 write (int fd, const void *buffer, unsigned size) {
   verify_address (buffer);
-  //printf ("I called write with %d, %s, %d\n", fd, buffer, size);
   if (fd == 0) {
     return 0;
   }
@@ -290,7 +335,7 @@ write (int fd, const void *buffer, unsigned size) {
 
   int bytes_written = 0;
 
-  process_file *process_file = file_finder (fd);
+  process_file *process_file = find_file (fd);
   if (process_file) {
     bytes_written = file_write (process_file->file, buffer, size);
   }
@@ -300,17 +345,23 @@ write (int fd, const void *buffer, unsigned size) {
   return bytes_written;
 }
 
+/* 
+  Wrapper function to execute seek() system call 
+*/
 static void
 seek_wrapper (int *addr) {
   seek ((int) *(addr + 1), (unsigned) *(addr + 2));
 }
 
+/* 
+  System call that changes next byte to be read/ written 
+  in open file fd to position (bytes) from beginning of file
+*/
 void 
 seek (int fd, unsigned position) {
-  //printf ("I called read with %d, %d\n", fd, position);
   lock_acquire (&file_system_lock);
 
-  process_file *process_file = file_finder (fd);
+  process_file *process_file = find_file (fd);
   if (process_file) {
     file_seek (process_file->file, position);
   }
@@ -319,19 +370,25 @@ seek (int fd, unsigned position) {
 
 }
 
+/* 
+  Wrapper function to execute tell() system call 
+*/
 static void
 tell_wrapper (uint32_t *eax, int *addr) {
   *eax = tell ((int) *(addr + 1));
 }
 
+/* 
+  System call that returns the position (bytes) from beginning of file 
+  of next byte to be read/ written in open file fd 
+*/
 unsigned 
 tell (int fd) {
-  //printf ("I called tell with %d\n", fd);
   lock_acquire (&file_system_lock);
 
   int position = 0;
 
-  process_file *process_file = file_finder (fd);
+  process_file *process_file = find_file (fd);
   if (process_file) {
     position = file_tell (process_file->file);
   }
@@ -341,20 +398,24 @@ tell (int fd) {
   return position;
 }
 
+/* 
+  Wrapper function to execute close() system call 
+*/
 static void
 close_wrapper (int *addr) {
   close ((int) *(addr + 1));
 }
 
+/* 
+  System call that closes file descriptor fd 
+*/
 void 
 close (int fd) {
-  //printf ("I called close with %d\n", fd);
   lock_acquire (&file_system_lock);
 
-  process_file *process_file = file_finder (fd);
+  process_file *process_file = find_file (fd);
   if (process_file) {
     file_close (process_file->file);
-    //file_allow_write (process_file->file);
     list_remove (&process_file->file_elem);
   }
   free (process_file);
@@ -363,8 +424,12 @@ close (int fd) {
   return;
 }
 
+/* 
+  Finds file with file descriptor fd in the file system.
+  Returns pointer to the file, or NULL if file cannot be found. 
+*/
 process_file *
-file_finder (int fd) {
+find_file (int fd) {
 
   struct list *file_list = &thread_current ()->file_list;
   
@@ -382,32 +447,41 @@ file_finder (int fd) {
   return NULL;
 }
 
+/*
+  Verifies that the given virutal address is in user space and 
+  in the page directory of the current thread.
+*/
 void 
 verify_address (const void *vaddr) {
   if (!is_user_vaddr (vaddr)) {
-    //printf ("Vaddr failed\n");
     exit (-1);
   }
   if (!pagedir_get_page(thread_current ()->pagedir, vaddr)) {
-    //printf ("Pagedir failed\n");
     exit (-1);
   }
-  //printf ("Passed argument verification\n");
 }
 
+/* 
+  Verifies the addresses of each of the arguments  
+*/
 void verify_arguments (int *addr, int num_of_args) {
-  //printf ("I am verifying the arguments\n");
   for (int i = 1; i <= num_of_args; i++) {
     verify_address ((const void *) (addr + i));
   }
 }
 
+/*
+  Displays the names and exit status of the thread that has just exited
+*/
 void 
 print_termination_output (void) {
   printf ("%s: exit(%d)\n", thread_current ()->name, thread_current ()->process_status);
 }
 
-
+/*
+  Verifies whether file with given filename exists.
+  Returns true if filename is valid, false otherwise.
+*/
 bool
 is_filename_valid (const char *filename) {
   return filesys_open (filename) != NULL;
@@ -417,7 +491,6 @@ is_filename_valid (const char *filename) {
   Initialise syscall_arr to store information about each system call function
 */
 static void syscall_arr_setup(void) {
-
   for (int i = SYS_HALT; i <= SYS_INUMBER; i++) {
     syscall_func_info info = {0};
     switch (i)
