@@ -52,6 +52,7 @@ process_execute (const char *file_name)
   char *strPointer;
   char *arg1 = strtok_r(str, " ", &strPointer);
 
+  enum intr_level old_level = intr_disable ();
 
   pcb *parent_pcb = get_pcb_from_id (thread_current ()->tid);
   if (parent_pcb == NULL) {
@@ -59,6 +60,8 @@ process_execute (const char *file_name)
     init_pcb (parent_pcb, thread_current ()->tid, CHILDLESS_PARENT_ID);
     list_push_back (&pcb_list, &parent_pcb->elem);
   }
+
+  intr_set_level (old_level);
 
   tid = thread_create (arg1, PRI_DEFAULT, start_process, fn_copy);
   if (tid == TID_ERROR) 
