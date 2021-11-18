@@ -60,8 +60,11 @@ process_execute (const char *file_name)
   return tid;
 }
 
+/* 
+  Function used to check if the stack pointer is decremented out of user space
+*/
 static bool check_stack_overflow (void *esp, unsigned long dcr) {
-  return ((int *) esp - dcr) > 0;
+  return ((int *) esp - dcr) >= 0;
 }
 
 /*  
