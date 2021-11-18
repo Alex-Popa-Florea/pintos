@@ -75,7 +75,7 @@ process_execute (const char *file_name)
   return tid;
 }
 
-/* 
+/*  
   A thread function that loads a user process and starts it running.
 */
 static void
