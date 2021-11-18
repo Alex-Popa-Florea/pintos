@@ -25,9 +25,11 @@ struct lock file_system_lock;
 /* Array storing information about each system call function */
 static syscall_func_info syscall_arr[NUM_SYSCALLS];
 
-static void syscall_handler (struct intr_frame *);
-static void syscall_arr_setup (void);
+/* Helper functions */
 
+static void syscall_handler (struct intr_frame *);
+
+/* Wrapper functions for use in syscall_arr */
 static void halt_wrapper (void);
 static void exit_wrapper (int *);
 static void exec_wrapper (uint32_t *, int *);
@@ -41,6 +43,13 @@ static void write_wrapper (uint32_t *, int *);
 static void seek_wrapper (int *);
 static void tell_wrapper (uint32_t *, int *);
 static void close_wrapper (int *);
+
+static process_file *find_file (int);
+static void verify_address (const void *);
+static void verify_arguments (int *, int);
+static void print_termination_output (void);
+
+static void syscall_arr_setup (void);
 
 void
 syscall_init (void) 
@@ -89,9 +98,7 @@ halt_wrapper (void) {
   halt ();
 }
  
-/* 
-  System call that terminates Pintos 
-*/ 
+
 void
 halt (void) {
   shutdown_power_off ();
@@ -105,9 +112,6 @@ exit_wrapper (int *addr) {
   exit ((int) *(addr + 1));
 }
 
-/* 
-  System call that terminates curret user program 
-*/ 
 void 
 exit (int status) {
   set_process_status (thread_current (), status);
@@ -123,10 +127,6 @@ exec_wrapper (uint32_t *eax , int *addr) {
   *eax = exec ((const char *) *(addr + 1));
 }
 
-/* 
-  System call that runs the executable given in cmd_line. 
-  Returns new process's pid.
-*/ 
 pid_t 
 exec (const char *cmd_line) {
   verify_address (cmd_line);
@@ -156,10 +156,6 @@ wait_wrapper (uint32_t *eax, int *addr) {
   *eax = wait ((pid_t) *(addr + 1));
 }
 
-/* 
-  System call that waits for a child process pid. 
-  Returns the child’s exit status.
-*/ 
 int 
 wait (pid_t pid) {
   return process_wait (pid);
@@ -173,10 +169,6 @@ create_wrapper (uint32_t *eax, int *addr) {
   *eax = create ((const char *) *(addr + 1), (unsigned) *(addr + 2));
 }
 
-/* 
-  System call that creates a new file of intial size initial_size.
-  Returns true if successful, false otherwise
-*/
 bool 
 create (const char *file, unsigned initial_size) {
   verify_address (file);
@@ -194,10 +186,6 @@ remove_wrapper (uint32_t *eax, int *addr) {
   *eax = remove ((const char *) *(addr + 1));
 }
 
-/* 
-  System call that deletes given file. 
-  Returns true if successful, false otherwise.
-*/
 bool
 remove (const char *file) {
   verify_address (file);
@@ -215,10 +203,6 @@ open_wrapper (uint32_t *eax, int *addr) {
   *eax = open ((const char *) *(addr + 1));
 }
 
-/* 
-  System call that opens the given file.
-  Returns the file's file descriptor if successful, otherwise -1 
-*/
 int 
 open (const char *file) {
   verify_address (file);
@@ -255,9 +239,6 @@ filesize_wrapper (uint32_t *eax, int *addr) {
   *eax = filesize ((int) *(addr + 1));
 }
 
-/* 
-  System call that returns the size (bytes) of file open as fd
-*/
 int 
 filesize (int fd) {
   lock_acquire (&file_system_lock);
@@ -282,10 +263,6 @@ read_wrapper (uint32_t *eax, int *addr) {
   *eax = read ((int) *(addr + 1), (void *) *(addr + 2), (unsigned) *(addr + 3));
 }
 
-/* 
-  System call that reads size bytes from file open as fd into buffer.
-  Returns number of bytes read, or -1 if unsuccessful.
-*/
 int 
 read (int fd, void *buffer, unsigned size) {
   verify_address (buffer);
@@ -315,10 +292,6 @@ write_wrapper (uint32_t *eax, int *addr) {
   *eax = write ((int) *(addr + 1), (const void *) *(addr + 2), (unsigned) *(addr + 3));
 }
 
-/* 
-  System call that writes size bytes from buffer into file open as fd.
-  Returns number of bytes written, or 0 if unsuccessful.
-*/
 int 
 write (int fd, const void *buffer, unsigned size) {
   verify_address (buffer);
@@ -353,10 +326,6 @@ seek_wrapper (int *addr) {
   seek ((int) *(addr + 1), (unsigned) *(addr + 2));
 }
 
-/* 
-  System call that changes next byte to be read/ written 
-  in open file fd to position (bytes) from beginning of file
-*/
 void 
 seek (int fd, unsigned position) {
   lock_acquire (&file_system_lock);
@@ -378,10 +347,6 @@ tell_wrapper (uint32_t *eax, int *addr) {
   *eax = tell ((int) *(addr + 1));
 }
 
-/* 
-  System call that returns the position (bytes) from beginning of file 
-  of next byte to be read/ written in open file fd 
-*/
 unsigned 
 tell (int fd) {
   lock_acquire (&file_system_lock);
@@ -406,9 +371,6 @@ close_wrapper (int *addr) {
   close ((int) *(addr + 1));
 }
 
-/* 
-  System call that closes file descriptor fd 
-*/
 void 
 close (int fd) {
   lock_acquire (&file_system_lock);
@@ -428,7 +390,7 @@ close (int fd) {
   Finds file with file descriptor fd in the file system.
   Returns pointer to the file, or NULL if file cannot be found. 
 */
-process_file *
+static process_file *
 find_file (int fd) {
 
   struct list *file_list = &thread_current ()->file_list;
@@ -451,7 +413,7 @@ find_file (int fd) {
   Verifies that the given virutal address is in user space and 
   in the page directory of the current thread.
 */
-void 
+static void 
 verify_address (const void *vaddr) {
   if (!is_user_vaddr (vaddr)) {
     exit (-1);
@@ -464,7 +426,8 @@ verify_address (const void *vaddr) {
 /* 
   Verifies the addresses of each of the arguments  
 */
-void verify_arguments (int *addr, int num_of_args) {
+static void 
+verify_arguments (int *addr, int num_of_args) {
   for (int i = 1; i <= num_of_args; i++) {
     verify_address ((const void *) (addr + i));
   }
@@ -473,18 +436,9 @@ void verify_arguments (int *addr, int num_of_args) {
 /*
   Displays the names and exit status of the thread that has just exited
 */
-void 
+static void 
 print_termination_output (void) {
   printf ("%s: exit(%d)\n", thread_current ()->name, thread_current ()->process_status);
-}
-
-/*
-  Verifies whether file with given filename exists.
-  Returns true if filename is valid, false otherwise.
-*/
-bool
-is_filename_valid (const char *filename) {
-  return filesys_open (filename) != NULL;
 }
 
 /*

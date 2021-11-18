@@ -35,12 +35,6 @@ static bool load (const char *cmdline, void (**eip) (void), void **esp);
 */
 struct list pcb_list = LIST_INITIALIZER (pcb_list); 
 
-/* 
-  Starts a new thread running a user program loaded from
-  FILENAME.  The new thread may be scheduled (and may even exit)
-  before process_execute() returns.  Returns the new process's
-  thread id, or TID_ERROR if the thread cannot be created. 
-*/
 tid_t
 process_execute (const char *file_name) 
 {
@@ -176,9 +170,6 @@ start_process (void *file_name_)
   NOT_REACHED ();
 }
 
-/*
-    Initialises a PCB with its id and parent id
-*/
 void 
 init_pcb (pcb *pcb, int id, int parent_id) {
   pcb->id = id;
@@ -190,17 +181,11 @@ init_pcb (pcb *pcb, int id, int parent_id) {
   sema_init (&pcb->load_sema, 0);
 }
 
-/* 
-  Records the id of the child process that a parent process waits on
-*/
 void
 pcb_set_waiting_on (pcb *pcb, int waiting_on) {
   pcb->waiting_on = waiting_on;
 }
 
-/*
-  Returns true if the process has another process as its child
-*/
 bool 
 process_has_child (pcb *parent, pid_t child_id) {
   pcb *child_pcb = get_pcb_from_id (child_id);
@@ -210,9 +195,6 @@ process_has_child (pcb *parent, pid_t child_id) {
   return parent->id == child_pcb->parent_id;
 }
 
-/*
-  Returns a pointer to the pcb corresponding to an id, NULL if there is no match
-*/
 pcb 
 *get_pcb_from_id (tid_t tid) {
   struct list_elem *e;
@@ -226,14 +208,6 @@ pcb
   return NULL;
 }
 
-/* 
-  Waits for thread TID to die and returns its exit status. 
-  If it was terminated by the kernel (i.e. killed due to an exception), 
-  returns -1.  
-  If TID is invalid or if it was not a child of the calling process, or if 
-  process_wait() has already been successfully called for the given TID, 
-  returns -1 immediately, without waiting.
-*/
 int
 process_wait (tid_t child_tid) 
 {
@@ -266,8 +240,6 @@ process_wait (tid_t child_tid)
   return child_exit_status;
 }
 
-
-/* Frees the current process's resources. */
 void
 process_exit (void)
 {
@@ -336,11 +308,6 @@ process_exit (void)
     }
 }
 
-
-
-/* Sets up the CPU for running user code in the current
-   thread.
-   This function is called on every context switch. */
 void
 process_activate (void)
 {

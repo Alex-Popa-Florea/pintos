@@ -9,12 +9,31 @@
 #include "threads/thread.h"
 #include "threads/synch.h"
 
+/* 
+  Starts a new thread running a user program loaded from
+  FILENAME.  The new thread may be scheduled (and may even exit)
+  before process_execute() returns.  Returns the new process's
+  thread id, or TID_ERROR if the thread cannot be created. 
+*/
 tid_t process_execute (const char *file_name);
-int process_wait (tid_t);
-void process_exit (void);
-void process_activate (void);
-void verify_address (const void *vaddr);
 
+/* 
+  Waits for thread TID to die and returns its exit status. 
+  If it was terminated by the kernel (i.e. killed due to an exception), 
+  returns -1.  
+  If TID is invalid or if it was not a child of the calling process, or if 
+  process_wait() has already been successfully called for the given TID, 
+  returns -1 immediately, without waiting.
+*/
+int process_wait (tid_t);
+
+/* Frees the current process's resources. */
+void process_exit (void);
+
+/* Sets up the CPU for running user code in the current
+   thread.
+   This function is called on every context switch. */
+void process_activate (void);
 
 /*
     Struct for a process control block, storing a process and relevant info
@@ -32,10 +51,24 @@ typedef struct {
     struct semaphore load_sema;     /* Semaphore to block a process while it loads a child */
 } pcb;
 
-
+/*
+    Initialises a PCB with its id and parent id
+*/
 void init_pcb (pcb *, int, int);
+
+/* 
+  Records the id of the child process that a parent process waits on
+*/
 void pcb_set_waiting_on (pcb *, int);
+
+/*
+  Returns true if the process has another process as its child
+*/
 bool process_has_child (pcb *parent, pid_t child_id);
+
+/*
+  Returns a pointer to the pcb corresponding to an id, NULL if there is no match
+*/
 pcb *get_pcb_from_id (tid_t);
 
 #endif /* userprog/process.h */
