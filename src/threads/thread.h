@@ -106,7 +106,7 @@ struct thread
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
     int process_status;                 /* Status of the process which owns the thread. */
-    bool is_thread_user_process;        /* Marks if a thread belongs to the kernel or a user process. */
+    int parent_id;                      /* Id of the thread's parent */ 
 
     int current_file_descriptor;        /* Stores the file descriptor of the last file opened or used. */  
     struct list file_list;              /* Stores the list of files opened by the thread. */

@@ -16,6 +16,8 @@
 #include "threads/malloc.h"
 #include "lib/user/syscall.h"
 
+extern struct list pcb_list; // List of all pcbs as defined in process.c
+
 struct lock file_system_lock; // Lock to ensure only one process can access file system at once
 
 /* Array storing information about each system call function */
@@ -105,6 +107,7 @@ static void
 exec_wrapper (uint32_t *eax , int *addr) {
   *eax = exec ((const char *) *(addr + 1));
 }
+
 pid_t 
 exec (const char *cmd_line) {
   verify_address (cmd_line);
@@ -113,26 +116,33 @@ exec (const char *cmd_line) {
     return -1;
   } 
   
-  lock_acquire (&file_system_lock);
+  // lock_acquire (&file_system_lock);
 
-  // Extract the name of the file from the command
-  int command_size = strlen(cmd_line) + 1;
-  char str[command_size];
-  strlcpy (str, cmd_line, command_size);
-  char *strPointer;
-  char *file_name = strtok_r(str, " ", &strPointer);
+  // // Extract the name of the file from the command
+  // int command_size = strlen(cmd_line) + 1;
+  // char str[command_size];
+  // strlcpy (str, cmd_line, command_size);
+  // char *strPointer;
+  // char *file_name = strtok_r(str, " ", &strPointer);
 
-  if (!is_filename_valid (file_name)) {
-    lock_release (&file_system_lock);
-    return -1;
-  }
+  // if (!is_filename_valid (file_name)) {
+  //   lock_release (&file_system_lock);
+  //   return -1;
+  // }
 
-  lock_release (&file_system_lock);
+  // lock_release (&file_system_lock);
+
+  // Block the current process until it knows the success of the child process load
+  pcb *current_pcb = get_pcb_from_id (thread_current ()->tid);
   pid_t new_process_pid = process_execute (cmd_line);
 
+  sema_down (&current_pcb->load_sema);
   
-
-  return new_process_pid;
+  if (current_pcb->load_process_success) {
+    return new_process_pid;
+  } else {
+    return -1;
+  }
 
 }
 

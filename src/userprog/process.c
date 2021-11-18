@@ -58,18 +58,7 @@ process_execute (const char *file_name)
   char *arg1 = strtok_r(str, " ", &strPointer);
 
 
-  /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (arg1, PRI_DEFAULT, start_process, fn_copy);
-  if (tid == TID_ERROR) 
-    palloc_free_page (fn_copy); 
-
-
-  enum intr_level old_level = intr_disable ();
-
-  //printf("AT THE START OF EXECUTE FOR THREAD %d, PCBS ARE:\n", thread_current ()->tid);
-  //print_pcb_ids ();
-
-  // Make the new process a child of the current process
+  // Obtain the pcb of the parent process
   pcb *parent_pcb = get_pcb_from_id (thread_current ()->tid);
   if (parent_pcb == NULL) {
     // Edge case: the first process created has no parent
@@ -77,6 +66,20 @@ process_execute (const char *file_name)
     init_pcb (parent_pcb, thread_current ()->tid, CHILDLESS_PARENT_ID);
     list_push_back (&pcb_list, &parent_pcb->elem);
   }
+
+
+  /* Create a new thread to execute FILE_NAME. */
+  tid = thread_create (arg1, PRI_DEFAULT, start_process, fn_copy);
+  if (tid == TID_ERROR) 
+    palloc_free_page (fn_copy); 
+
+  enum intr_level old_level = intr_disable ();
+
+
+  //printf("AT THE START OF EXECUTE FOR THREAD %d, PCBS ARE:\n", thread_current ()->tid);
+  //print_pcb_ids ();
+
+  
   
   // Initialise a PCB for the new process thread
   pcb *new_pcb = (pcb *) malloc (sizeof(pcb));
@@ -88,6 +91,7 @@ process_execute (const char *file_name)
   //printf("AT THE END OF EXECUTE FOR THREAD %d, PCBS ARE:\n", thread_current ()->tid);
   //print_pcb_ids();
 
+  // Unblock parent process
   intr_set_level (old_level);
   return tid;
 }
@@ -139,11 +143,15 @@ start_process (void *file_name_)
   success = load (file_name, &if_.eip, &if_.esp);
 
   palloc_free_page (whole_file);
+
+  pcb *parent_pcb = get_pcb_from_id (thread_current ()->parent_id);
+  parent_pcb->load_process_success = success;
+  sema_up (&parent_pcb->load_sema);
+
   /* If load failed, quit. */
   if (!success) 
     thread_exit ();
 
-  
   // Setting up the stack 
 
   /*
@@ -207,9 +215,12 @@ init_pcb (pcb *pcb, int id, int parent_id) {
   pcb->id = id;
   pcb->parent_id = parent_id;
   pcb->exit_status = PROCESS_UNTOUCHED_STATUS;
-  sema_init (&pcb->sema, 0);
+  sema_init (&pcb->wait_sema, 0);
   pcb->has_been_waited_on = false;
+  pcb->load_process_success = false;
+  sema_init (&pcb->load_sema, 0);
 }
+
 
 void
 pcb_set_waiting_on (pcb *pcb, int waiting_on) {
@@ -274,6 +285,8 @@ process_wait (tid_t child_tid)
   //printf("AT THE START OF WAIT FOR THREAD %d, PCBS ARE:\n", thread_current ()->tid);
   //print_pcb_ids ();
   pcb *current_pcb = get_pcb_from_id (current_thread->tid);
+  
+  
 
   // The thread does not correspond to a child process of the current process
   if (!process_has_child (current_pcb, child_tid)) {
@@ -285,6 +298,10 @@ process_wait (tid_t child_tid)
   if (child_pcb->has_been_waited_on) {
     return -1;
   }
+  // The child process has now terminated, so the current process runs
+  child_pcb->has_been_waited_on = true;
+
+
 
   //printf("AT THE MIDDLE OF WAIT FOR THREAD %d, PCBS ARE:\n", thread_current ()->tid);
   //print_pcb_ids ();
@@ -296,14 +313,10 @@ process_wait (tid_t child_tid)
 
   // Block the current process' thread
   current_pcb->waiting_on = child_tid;
-  sema_down (&current_pcb->sema);
+  sema_down (&current_pcb->wait_sema);
 
-  // The child process has now terminated, so the current process runs
-  child_pcb->has_been_waited_on = true;
   current_pcb->waiting_on = NOT_WAITING;
   int child_exit_status = child_pcb->exit_status;
-  // list_remove (&child_pcb->elem);
-  // free (child_pcb);
 
   //printf("AT THE END OF WAIT FOR THREAD %d, PCBS ARE:\n", thread_current ()->tid);
   //print_pcb_ids ();
@@ -342,6 +355,7 @@ process_exit (void)
   
   lock_release (&file_system_lock);
 
+  // When a process exits, free all its child processes which have terminated
   for (e = list_begin (&pcb_list); e != list_end (&pcb_list);) {
     pcb *child_pcb = list_entry (e, pcb, elem);
     ASSERT(current_pcb);
@@ -364,7 +378,7 @@ process_exit (void)
   } else {
     // The parent process still exists
     if (current_pcb->id == parent_pcb->waiting_on) {
-      sema_up (&parent_pcb->sema);
+      sema_up (&parent_pcb->wait_sema);
     }
   }
 

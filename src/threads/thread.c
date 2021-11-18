@@ -229,6 +229,9 @@ thread_create (const char *name, int priority,
 
   /* Initialize thread. */
   init_thread (t, name, priority);
+  #ifdef USERPROG
+    t->parent_id = thread_current ()->tid;
+  #endif
   tid = t->tid = allocate_tid ();
 
   /* Prepare thread for first run by initializing its stack.
