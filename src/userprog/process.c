@@ -244,7 +244,6 @@ process_wait (tid_t child_tid)
 {
   struct thread *current_thread = thread_current ();
   pcb *current_pcb = get_pcb_from_id (current_thread->tid);
-  //ASSERT(current_pcb);
   if (!process_has_child (current_pcb, child_tid)) {
     return -1;
   }
@@ -699,6 +698,5 @@ install_page (void *upage, void *kpage, bool writable)
 
 void 
 set_exit_status (pcb *p, int status) {
-  //printf("Thread %d changed its status from %d to %d\n", t->tid, t->process_status, status);
   p->exit_status = status;
 }
