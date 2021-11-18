@@ -141,7 +141,7 @@ start_process (void *file_name_)
   palloc_free_page (whole_file);
   /* If load failed, quit. */
   if (!success) 
-    exit (-1);
+    thread_exit ();
 
   
   // Setting up the stack 
