@@ -67,14 +67,14 @@ process_execute (const char *file_name)
   if (tid == TID_ERROR) 
     palloc_free_page (fn_copy); 
 
-  enum intr_level old_level = intr_disable ();
+  enum intr_level prev_level = intr_disable ();
   
   pcb *new_pcb = (pcb *) malloc (sizeof(pcb));
   init_pcb (new_pcb, tid, parent_pcb->id);
  
   list_push_back (&pcb_list, &new_pcb->elem);
 
-  intr_set_level (old_level);
+  intr_set_level (prev_level);
   return tid;
 }
 
