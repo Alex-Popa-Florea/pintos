@@ -47,6 +47,7 @@ static void close_wrapper (int *);
 static process_file *find_file (int);
 static void verify_address (const void *);
 static void verify_arguments (int *, int);
+static void verify_file_ptr (const void *file);
 static void verify_buffer(const void *buffer, int size);
 static void print_termination_output (void);
 
@@ -208,7 +209,7 @@ open_wrapper (uint32_t *eax, int *addr) {
 
 int 
 open (const char *file) {
-  verify_address (file);
+  verify_file_ptr (file);
   lock_acquire (&file_system_lock);
 
   struct file *new_file = filesys_open (file);
@@ -421,25 +422,37 @@ verify_address (const void *vaddr) {
   if (!is_user_vaddr (vaddr)) {
     exit (-1);
   }
-  if (!pagedir_get_page(thread_current ()->pagedir, vaddr)) {
+  if (!pagedir_get_page (thread_current ()->pagedir, vaddr)) {
     exit (-1);
   }
 }
 
+/* 
+  Verifies the address of buffer, even if it lies on multiple pages
+*/
 static void
-verify_buffer(const void *buffer, int size){
-  if (!is_user_vaddr (buffer)) {
-    exit (-1);
+verify_buffer (const void *buffer, int size) {
+  verify_address (buffer);
+  for (int i = PGSIZE; i < size; i += PGSIZE) {
+    verify_address (buffer + i);
   }
-  for (int i = 0; i < size; i += PGSIZE){
-    if (!pagedir_get_page(thread_current ()->pagedir, buffer + i)) {
-      exit (-1);
+  verify_address (buffer + size);
+}
+
+/* 
+  Verifies the address of a file pointer, even if it lies on multiple pages 
+*/
+static void
+verify_file_ptr (const void *file) {
+  verify_address (file);
+  int i = 1;
+  while (*(char *) (file + i) != '\0') {
+    if (i % PGSIZE == 0) {
+      verify_address (file + i);
     }
+    i++;
   }
-  if (!pagedir_get_page(thread_current ()->pagedir, buffer + size)) {
-    exit (-1);
-  }
-  
+  verify_address (file + i);
 }
 
 /* 
@@ -457,7 +470,7 @@ verify_arguments (int *addr, int num_of_args) {
 */
 static void 
 print_termination_output (void) {
-  printf ("%s: exit(%d)\n", thread_current ()->name, get_pcb_from_id(thread_current ()->tid)->exit_status);
+  printf ("%s: exit(%d)\n", thread_current ()->name, get_pcb_from_id (thread_current ()->tid)->exit_status);
 }
 
 /*
