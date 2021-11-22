@@ -62,6 +62,33 @@ static bool check_stack_overflow (void *esp, unsigned long dcr) {
   return ((int *) esp - dcr) >= (PHYS_BASE - PGSIZE);
 }
 
+static void add_byte_to_stack (void **esp, uint8_t arg) {
+  if (check_stack_overflow (esp, sizeof (uint8_t))) {
+    *esp = *esp - sizeof (uint8_t);
+    *((uint8_t *)*esp) = arg;
+  } else {
+    exit (-1);
+  }
+}
+
+static void add_word_to_stack (void **esp, uint32_t arg) {
+  if (check_stack_overflow (esp, sizeof (uint32_t))) {
+    *esp = *esp - sizeof (uint32_t);
+    *((uint32_t *)*esp) = arg;
+  } else {
+    exit (-1);
+  }
+}
+
+static void add_string_to_stack (void **esp, char *string, int len) {
+  if (check_stack_overflow (esp, sizeof (char) * (len + 1))) {
+    *esp = *esp - sizeof (char) * (len + 1);
+    strlcpy (*esp, string, sizeof (char) * (len + 1));
+  } else {
+    exit (-1);
+  }
+}
+
 /*  
   A thread function that loads a user process and starts it running.
 */
@@ -111,7 +138,9 @@ start_process (void *file_name_)
 
   palloc_free_page (whole_file);
 
+  lock_acquire (&pcb_list_lock);
   pcb *parent_pcb = get_pcb_from_id (thread_current ()->parent_id);
+  lock_release (&pcb_list_lock);
   parent_pcb->load_process_success = success;
   sema_up (&parent_pcb->load_sema);
 
@@ -120,80 +149,36 @@ start_process (void *file_name_)
 
   /* Set up the stack with the tokenised arguments */
 
-  /* Add parsed arguments to stack */
   char *argv_ptrs[argc];
-  unsigned long dcr = 0;
 
+  /* Add parsed arguments to stack */
   for (int i = argc - 1; i >= 0; i--) {
-    dcr = sizeof (char) * (strlen (argv[i]) + 1);
-    if (check_stack_overflow (if_.esp, dcr)) {
-      if_.esp = if_.esp - dcr;
-      strlcpy (if_.esp, argv[i], sizeof (char) * (strlen (argv[i]) + 1));
-      argv_ptrs[i] = if_.esp;
-    } else {
-      exit (-1);
-    }
+    uint32_t len = strlen (argv[i]);
+    add_string_to_stack (&if_.esp, argv[i], len);
+    argv_ptrs[i] = if_.esp;
   }
 
   /* Add word align buffer to the stack */
-  dcr = sizeof (uint8_t);
-  if (check_stack_overflow (if_.esp, dcr)) {
-    if_.esp = if_.esp - dcr;
-    uint8_t word_align = 0;
-    *(uint8_t *)(if_.esp) = word_align;
-  } else {
-    exit (-1);
+  for (i = (uintptr_t) if_.esp % sizeof (uint32_t); i > 0; i--) {
+    add_byte_to_stack (&if_.esp, (uint8_t) 0);
   }
 
   /* Adds null pointer sentinel to the stack */
-  dcr = sizeof (char *);
-  if (check_stack_overflow (if_.esp, dcr)) {
-    if_.esp = if_.esp - dcr;
-    (*(char *)(if_.esp)) = 0; 
-  } else {
-    exit (-1);
-  }
-  
-  
+  add_word_to_stack (&if_.esp, (uint8_t) 0);
+
   /* Adds addresses of arguments to stack */
   for (int j = argc - 1; j >= 0; j--) {
-    dcr = sizeof (char *);
+    add_word_to_stack (&if_.esp, (uint32_t) argv_ptrs[j]);
+  }
 
-    if (check_stack_overflow (if_.esp, dcr)) {
-      if_.esp = if_.esp - dcr;
-      *(char **)(if_.esp) = argv_ptrs[j];
-    } else {
-      exit (-1);
-    }
-  }
-  
   /* Adds pointer to the start of argument array to stack */
-  dcr = sizeof (char **);
-  if (check_stack_overflow (if_.esp, dcr)) {
-    if_.esp = if_.esp - dcr;
-    char **argv_ptr = if_.esp + sizeof (char **);
-    *(char ***)(if_.esp) = argv_ptr;
-  } else {
-    exit (-1);
-  }
+  add_word_to_stack (&if_.esp, (uint32_t) if_.esp);
 
   /* Adds number of arguments to stack */
-  dcr = sizeof (int);
-  if (check_stack_overflow (if_.esp, dcr)) {
-    if_.esp = if_.esp - dcr;
-    (*(int *)(if_.esp)) = argc;
-  } else {
-    exit (-1);
-  }
-  
-  
+  add_word_to_stack (&if_.esp, (uint32_t) argc);
+
   /* Adds return address to stack */
-  if (check_stack_overflow (if_.esp, dcr)) {
-    if_.esp = if_.esp - dcr;
-    (*(int *)(if_.esp)) = 0;  
-  } else {
-    exit (-1);
-  }
+  add_word_to_stack (&if_.esp, (uint32_t) 0);
 
   asm volatile ("movl %0, %%esp; jmp intr_exit" : : "g" (&if_) : "memory");
   NOT_REACHED ();

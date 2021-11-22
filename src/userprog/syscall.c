@@ -116,7 +116,9 @@ exit_wrapper (int *addr) {
 
 void 
 exit (int status) {
+  lock_acquire (&pcb_list_lock);
   set_exit_status (get_pcb_from_id (thread_current ()->tid), status);
+  lock_release (&pcb_list_lock);
   print_termination_output ();
   thread_exit ();
 }
@@ -137,7 +139,9 @@ exec (const char *cmd_line) {
   } 
 
   /* Block the current process until it knows the success of the child process load */
+  lock_acquire (&pcb_list_lock);
   pcb *current_pcb = get_pcb_from_id (thread_current ()->tid);
+  lock_release (&pcb_list_lock);
   pid_t new_process_pid = process_execute (cmd_line);
   ASSERT(current_pcb);
 
@@ -470,7 +474,9 @@ verify_arguments (int *addr, int num_of_args) {
 */
 static void 
 print_termination_output (void) {
+  lock_acquire (&pcb_list_lock);
   printf ("%s: exit(%d)\n", thread_current ()->name, get_pcb_from_id (thread_current ()->tid)->exit_status);
+  lock_release (&pcb_list_lock);
 }
 
 /*
