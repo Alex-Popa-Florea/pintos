@@ -115,7 +115,9 @@ thread_init (void)
     load_avg = (fp_int) {INITIAL_LOAD};
   }
 
-  lock_init (&pcb_list_lock);
+  #ifdef USERPROG
+    lock_init (&pcb_list_lock);
+  #endif
 
   /* Set up a thread structure for the running thread. */
   init_thread (initial_thread, "main", PRI_DEFAULT);
