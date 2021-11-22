@@ -25,11 +25,6 @@
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 
-/* 
-  Limit on size of command-line arguments (bytes) 
-*/
-#define COMMAND_LINE_LIMIT (128)
-
 /*
   Intialise a global list to store all of the pcbs
 */
@@ -64,7 +59,7 @@ process_execute (const char *file_name)
   Function used to check if the stack pointer is decremented out of user space
 */
 static bool check_stack_overflow (void *esp, unsigned long dcr) {
-  return ((int *) esp - dcr) >= 0;
+  return ((int *) esp - dcr) >= (PHYS_BASE - PGSIZE);
 }
 
 /*  
@@ -77,28 +72,35 @@ start_process (void *file_name_)
   struct intr_frame if_;
   bool success;
 
+  int file_size = strlen(whole_file) + 1;
+
+  /* Calculate the number of command line arguments */
+  int argc = 0; 
+  char *tk, *arg_ptr;
+  char cmd_line[file_size];
+  strlcpy (cmd_line, whole_file, file_size);
+
+  for (tk = strtok_r (cmd_line, " ", &arg_ptr); tk != NULL;
+        tk = strtok_r (NULL, " ", &arg_ptr))
+     argc++;
+
   char *token, *save_ptr;
   
-  int file_size = strlen(whole_file) + 1;
   char str[file_size];
   strlcpy (str, whole_file, file_size);
   
-  int limit = COMMAND_LINE_LIMIT / 2;
-  /* Array used to store command line arguments. */
-  char *argv[limit];
-
-  /* Records the number of command line arguments */
-  int argc = 0; 
+  /* Initialise array used to store command line arguments. */
+  char *argv[argc];
 
   token = strtok_r (str, " ", &save_ptr);
   char *file_name = token;
 
-  while (token != NULL && argc < limit) {
-    argv[argc] = token;
-    argc++;
+  int i = 0;
+  while (token != NULL) {
+    argv[i] = token;
+    i++;
     token = strtok_r (NULL, " ", &save_ptr);
   }
-
 
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
