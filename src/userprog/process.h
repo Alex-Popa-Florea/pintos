@@ -3,7 +3,6 @@
 
 #define PROCESS_UNTOUCHED_STATUS (-10)
 #define CHILDLESS_PARENT_ID (-50)
-#define NOT_WAITING (-100)
 
 #include "lib/user/syscall.h"
 #include "threads/thread.h"
@@ -47,7 +46,6 @@ typedef struct {
     struct list_elem elem;          /* Elem to insert pcb into a list */
     int exit_status;                /* Status of the process */
 
-    int waiting_on;                 /* Id of the child process that a parent process waits on */
     bool has_been_waited_on;        /* Boolean to track if a wait has already been called on the process */
     struct semaphore wait_sema;     /* Semaphore used to block a process when it waits on its child process */
     bool load_process_success;      /* Flag to indicate success of loading a process from an executable */
@@ -59,10 +57,6 @@ typedef struct {
 */
 void init_pcb (pcb *, int, int);
 
-/* 
-  Records the id of the child process that a parent process waits on
-*/
-void pcb_set_waiting_on (pcb *, int);
 
 /*
   Returns true if the process has another process as its child
@@ -71,8 +65,12 @@ bool process_has_child (pcb *parent, pid_t child_id);
 
 /*
   Returns a pointer to the pcb corresponding to an id, NULL if there is no match
+  Assumes interrupts are disabled so access is thread-safe
 */
 pcb *get_pcb_from_id (tid_t);
 
+/*
+  Set the exit status of a pcb to the exit status provided
+*/
 void set_exit_status (pcb *, int);
 #endif /* userprog/process.h */

@@ -26,7 +26,7 @@ static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 
 /*
-  Intialise a global list to store all of the pcbs
+  Initialise a global list to store all of the pcbs
 */
 struct list pcb_list = LIST_INITIALIZER (pcb_list); 
 struct lock pcb_list_lock;
@@ -210,11 +210,6 @@ init_pcb (pcb *pcb, int id, int parent_id) {
   sema_init (&pcb->load_sema, 0);
 }
 
-void
-pcb_set_waiting_on (pcb *pcb, int waiting_on) {
-  pcb->waiting_on = waiting_on;
-}
-
 bool 
 process_has_child (pcb *parent, pid_t child_id) {
   pcb *child_pcb = get_pcb_from_id (child_id);
@@ -227,17 +222,12 @@ process_has_child (pcb *parent, pid_t child_id) {
 pcb 
 *get_pcb_from_id (tid_t tid) { 
   struct list_elem *e;
-  lock_acquire (&pcb_list_lock);
-
   for (e = list_begin (&pcb_list); e != list_end (&pcb_list); e = list_next (e)) {
     pcb *current_pcb = list_entry (e, pcb, elem);
     if (current_pcb->id == tid) {
-      lock_release (&pcb_list_lock);
       return current_pcb;
     }
   }
-  
-  lock_release (&pcb_list_lock);
   return NULL;
 }
 
@@ -245,36 +235,37 @@ int
 process_wait (tid_t child_tid) 
 {
   struct thread *current_thread = thread_current ();
+  lock_acquire (&pcb_list_lock);
   pcb *current_pcb = get_pcb_from_id (current_thread->tid);
+
   if (!process_has_child (current_pcb, child_tid)) {
+    lock_release (&pcb_list_lock);
     return -1;
   }
 
   pcb *child_pcb = get_pcb_from_id (child_tid);
   if (child_pcb->has_been_waited_on) {
+    lock_release (&pcb_list_lock);
     return -1;
   }
   child_pcb->has_been_waited_on = true;
 
   if (child_pcb->exit_status != PROCESS_UNTOUCHED_STATUS) {
+    lock_release (&pcb_list_lock);
     return child_pcb->exit_status;
   }
 
-  current_pcb->waiting_on = child_tid;
-  sema_down (&current_pcb->wait_sema);
-
-  current_pcb->waiting_on = NOT_WAITING;
-  int child_exit_status = child_pcb->exit_status;
-
-  return child_exit_status;
+  lock_release (&pcb_list_lock);
+  sema_down (&child_pcb->wait_sema);
+  return child_pcb->exit_status;
 }
 
 void
 process_exit (void)
 {
   struct thread *cur = thread_current ();
+  lock_acquire (&pcb_list_lock);
   pcb *current_pcb = get_pcb_from_id  (cur->tid);
-  //current_pcb->exit_status = cur->process_status;
   uint32_t *pd;
   
   lock_acquire (&file_system_lock);
@@ -283,6 +274,7 @@ process_exit (void)
 
   file_close (cur->executable_file);
 
+  /* Close all the files opened by the process' thread */
   struct list_elem *e;
   while (!list_empty (file_list)) {
     e = list_pop_front (file_list);
@@ -291,9 +283,8 @@ process_exit (void)
     list_remove (e);
     free (current_file);
   }
-  
   lock_release (&file_system_lock);
-  lock_acquire (&pcb_list_lock);
+
   /* When a process exits, free all its child processes which have terminated */
   for (e = list_begin (&pcb_list); e != list_end (&pcb_list);) {
     pcb *child_pcb = list_entry (e, pcb, elem);
@@ -304,19 +295,17 @@ process_exit (void)
       e = list_next (e);
     }
   }
-  lock_release (&pcb_list_lock);
+
 
   pcb *parent_pcb = get_pcb_from_id (current_pcb->parent_id);
   if (parent_pcb == NULL) {
-    lock_acquire (&pcb_list_lock);
     list_remove (&current_pcb->elem);
     lock_release (&pcb_list_lock);
     free (&current_pcb);
-  } else {
-    if (current_pcb->id == parent_pcb->waiting_on) {
-      sema_up (&parent_pcb->wait_sema);
-    }
-  }
+  } 
+
+  sema_up (&current_pcb->wait_sema);
+  lock_release (&pcb_list_lock);
 
 
   /* Destroy the current process's page directory and switch back
