@@ -11,7 +11,6 @@ struct list frame_table;
 
 void 
 init_frame_table (void) {
-
   list_init (&frame_table);
   lock_init (&frame_table_lock);
 }
@@ -47,7 +46,7 @@ free_frame_table_entries_of_thread (struct thread *t) {
     frame_table_entry *f = list_entry (e, frame_table_entry, elem);
     if (f->thread == t) {
       e = list_remove (&f->elem);
-      free_frame_table_entry (f);
+      free (f);
     } else {
       e = list_next (e);
     }
