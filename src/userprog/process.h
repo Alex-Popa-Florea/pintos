@@ -7,6 +7,7 @@
 #include "lib/user/syscall.h"
 #include "threads/thread.h"
 #include "threads/synch.h"
+#include "vm/supp-page-table.h"
 
 extern struct list pcb_list;
 extern struct lock pcb_list_lock;
@@ -73,4 +74,7 @@ pcb *get_pcb_from_id (tid_t);
   Set the exit status of a pcb to the exit status provided
 */
 void set_exit_status (pcb *, int);
+
+void load_page(uint8_t *,supp_page_table_entry *);
+
 #endif /* userprog/process.h */

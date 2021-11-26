@@ -439,7 +439,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
       printf ("load: %s: error loading executable\n", file_name);
       goto done; 
     }
-
+  hash_init(&t->supp_page_table,&supp_hash,&supp_hash_compare,NULL);
   /* Read program headers. */
   file_ofs = ehdr.e_phoff;
   for (i = 0; i < ehdr.e_phnum; i++) 
@@ -603,33 +603,42 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       
       /* Check if virtual page already allocated */
       struct thread *t = thread_current ();
-      uint8_t *kpage = pagedir_get_page (t->pagedir, upage);
+      supp_page_table_entry entry;
+      entry.addr = upage;
+      entry.file = file;
+      entry.ofs = ofs;
+      entry.read_bytes = read_bytes;
+      entry.zero_bytes = zero_bytes;
+      entry.writable = writable;
+      hash_insert(&t->supp_page_table,&entry);
       
-      if (kpage == NULL){
-        
-        /* Get a new page of memory. */
-        kpage = try_allocate_page (PAL_USER);
-        if (kpage == NULL){
-          return false;
-        }
-        
-        /* Add the page to the process's address space. */
-        if (!install_page (upage, kpage, writable)) 
-        {
-          free_frame_table_entry_of_page (kpage);
-          palloc_free_page (kpage);
-          return false; 
-        }        
-      }
+// uint8_t *kpage = pagedir_get_page (t->pagedir, upage);
 
-      /* Load data into the page. */
-      if (file_read (file, kpage, page_read_bytes) != (int) page_read_bytes)
-        {
-          free_frame_table_entry_of_page (kpage);
-          palloc_free_page (kpage);
-          return false; 
-        }
-      memset (kpage + page_read_bytes, 0, page_zero_bytes);
+// if (kpage == NULL){
+// Will not be doing this here doing this in pagefault handler  *up to memset line 632*
+//   /* Get a new page of memory. */
+//   kpage = try_allocate_page (PAL_USER);
+//   if (kpage == NULL){
+//     return false;
+//   }
+  
+//   /* Add the page to the process's address space. */
+//   if (!install_page (upage, kpage, writable)) 
+//   {
+//     free_frame_table_entry_of_page (kpage);
+//     palloc_free_page (kpage);
+//     return false; 
+//   }        
+// }
+
+/* Load data into the page. */
+// if (file_read (file, kpage, page_read_bytes) != (int) page_read_bytes)
+//   {
+//     free_frame_table_entry_of_page (kpage);
+//     palloc_free_page (kpage);
+//     return false; 
+//   }
+// memset (kpage + page_read_bytes, 0, page_zero_bytes);
 
       /* Advance. */
       read_bytes -= page_read_bytes;
@@ -685,3 +694,30 @@ void
 set_exit_status (pcb *p, int status) {
   p->exit_status = status;
 }
+
+void load_page(uint8_t *kpage,supp_page_table_entry *entry){
+  
+      /* Get a new page of memory. */
+      kpage = try_allocate_page (PAL_USER);
+      if (kpage == NULL){
+        return false;
+      }
+
+      /* Add the page to the process's address space. */
+      if (!install_page (entry->addr, kpage, entry->writable)) 
+      {
+        free_frame_table_entry_of_page (kpage);
+        palloc_free_page (kpage);
+        return false; 
+      }        
+    
+      /*Load data into the page. */
+    if (file_read (entry->file, kpage, entry->read_bytes) != (int) entry->read_bytes)
+      {
+        free_frame_table_entry_of_page (kpage);
+        palloc_free_page (kpage);
+        return false; 
+      }
+    memset (kpage + entry->read_bytes, 0, entry->zero_bytes);
+}
+
