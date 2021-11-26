@@ -21,6 +21,7 @@
 #include "lib/string.h"
 #include "threads/malloc.h"
 #include "devices/timer.h"
+#include "vm/frame.h"
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
@@ -37,7 +38,7 @@ process_execute (const char *file_name)
   char *fn_copy;
   tid_t tid;
 
-  fn_copy = palloc_get_page (0); 
+  fn_copy = try_allocate_page (0); 
   if (fn_copy == NULL)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
@@ -49,9 +50,10 @@ process_execute (const char *file_name)
   char *arg1 = strtok_r(str, " ", &strPointer);
 
   tid = thread_create (arg1, PRI_DEFAULT, start_process, fn_copy);
-  if (tid == TID_ERROR) 
-    palloc_free_page (fn_copy); 
-
+  if (tid == TID_ERROR) {
+    free_frame_table_entry_of_page (fn_copy); 
+    palloc_free_page (fn_copy);
+  }
   return tid;
 }
 
@@ -136,6 +138,7 @@ start_process (void *file_name_)
   if_.eflags = FLAG_IF | FLAG_MBS;
   success = load (file_name, &if_.eip, &if_.esp);
 
+  free_frame_table_entry_of_page (whole_file);
   palloc_free_page (whole_file);
 
   lock_acquire (&pcb_list_lock);
@@ -269,6 +272,8 @@ process_exit (void)
     free (current_file);
   }
   lock_release (&file_system_lock);
+
+  free_frame_table_entries_of_thread (cur);
 
   /* When a process exits, free all its child processes which have terminated */
   for (e = list_begin (&pcb_list); e != list_end (&pcb_list);) {
@@ -603,7 +608,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       if (kpage == NULL){
         
         /* Get a new page of memory. */
-        kpage = palloc_get_page (PAL_USER);
+        kpage = try_allocate_page (PAL_USER);
         if (kpage == NULL){
           return false;
         }
@@ -611,6 +616,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
         /* Add the page to the process's address space. */
         if (!install_page (upage, kpage, writable)) 
         {
+          free_frame_table_entry_of_page (kpage);
           palloc_free_page (kpage);
           return false; 
         }        
@@ -619,6 +625,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       /* Load data into the page. */
       if (file_read (file, kpage, page_read_bytes) != (int) page_read_bytes)
         {
+          free_frame_table_entry_of_page (kpage);
           palloc_free_page (kpage);
           return false; 
         }
@@ -640,14 +647,16 @@ setup_stack (void **esp)
   uint8_t *kpage;
   bool success = false;
 
-  kpage = palloc_get_page (PAL_USER | PAL_ZERO);
+  kpage = try_allocate_page (PAL_USER | PAL_ZERO);
   if (kpage != NULL) 
     {
       success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
       if (success)
         *esp = PHYS_BASE;
-      else
+      else {
+        free_frame_table_entry_of_page (kpage);
         palloc_free_page (kpage);
+      }
     } 
   return success;
 }
