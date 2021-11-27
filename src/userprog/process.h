@@ -75,6 +75,9 @@ pcb *get_pcb_from_id (tid_t);
 */
 void set_exit_status (pcb *, int);
 
-void load_page(uint8_t *,supp_page_table_entry *);
+/*
+  Loads a page from Supplemental Page Table of process into memory
+*/
+bool load_page (uint8_t *, supp_page_table_entry *);
 
 #endif /* userprog/process.h */

@@ -439,7 +439,10 @@ load (const char *file_name, void (**eip) (void), void **esp)
       printf ("load: %s: error loading executable\n", file_name);
       goto done; 
     }
-  hash_init(&t->supp_page_table,&supp_hash,&supp_hash_compare,NULL);
+
+  /* Initialise Supplemental Page Table of process */  
+  hash_init(&t->supp_page_table, &supp_hash, &supp_hash_compare, NULL);
+  
   /* Read program headers. */
   file_ofs = ehdr.e_phoff;
   for (i = 0; i < ehdr.e_phnum; i++) 
@@ -601,7 +604,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
       size_t page_zero_bytes = PGSIZE - page_read_bytes;
       
-      /* Check if virtual page already allocated */
+      
       struct thread *t = thread_current ();
       supp_page_table_entry entry;
       entry.addr = upage;
@@ -610,35 +613,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       entry.read_bytes = read_bytes;
       entry.zero_bytes = zero_bytes;
       entry.writable = writable;
-      hash_insert(&t->supp_page_table,&entry);
-      
-// uint8_t *kpage = pagedir_get_page (t->pagedir, upage);
-
-// if (kpage == NULL){
-// Will not be doing this here doing this in pagefault handler  *up to memset line 632*
-//   /* Get a new page of memory. */
-//   kpage = try_allocate_page (PAL_USER);
-//   if (kpage == NULL){
-//     return false;
-//   }
-  
-//   /* Add the page to the process's address space. */
-//   if (!install_page (upage, kpage, writable)) 
-//   {
-//     free_frame_table_entry_of_page (kpage);
-//     palloc_free_page (kpage);
-//     return false; 
-//   }        
-// }
-
-/* Load data into the page. */
-// if (file_read (file, kpage, page_read_bytes) != (int) page_read_bytes)
-//   {
-//     free_frame_table_entry_of_page (kpage);
-//     palloc_free_page (kpage);
-//     return false; 
-//   }
-// memset (kpage + page_read_bytes, 0, page_zero_bytes);
+      hash_insert (&t->supp_page_table, &entry.hash_elem);
 
       /* Advance. */
       read_bytes -= page_read_bytes;
@@ -695,7 +670,8 @@ set_exit_status (pcb *p, int status) {
   p->exit_status = status;
 }
 
-void load_page(uint8_t *kpage,supp_page_table_entry *entry){
+bool
+load_page (uint8_t *kpage, supp_page_table_entry *entry) {
   
       /* Get a new page of memory. */
       kpage = try_allocate_page (PAL_USER);
@@ -719,5 +695,6 @@ void load_page(uint8_t *kpage,supp_page_table_entry *entry){
         return false; 
       }
     memset (kpage + entry->read_bytes, 0, entry->zero_bytes);
+    return true;
 }
 

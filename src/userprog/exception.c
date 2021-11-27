@@ -152,18 +152,22 @@ page_fault (struct intr_frame *f)
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
 
-  //COMMENT ME
+  /* 
+   If page fault occurred because page is not present, 
+   loads the page from the current thread's supplemental page table
+  */
   if(not_present){
     struct thread *t = thread_current ();
-    supp_page_table_entry *entry;
-    entry->addr = fault_addr;
-    struct hash_elem *hash_elem =  hash_find(&t->supp_page_table,entry);
-    entry = hash_entry(hash_elem,supp_page_table_entry,hash_elem);
-
+    supp_page_table_entry fault_entry;
+    fault_entry.addr = fault_addr;
+    struct hash_elem *hash_elem = hash_find (&t->supp_page_table, &(fault_entry.addr));
+    supp_page_table_entry *entry = hash_entry (hash_elem, supp_page_table_entry, hash_elem);
+    
+    /* Check if virtual page already allocated */
     uint8_t *kpage = pagedir_get_page (t->pagedir, entry->addr);
 
     if (kpage == NULL){
-      load_page(kpage,entry);
+      load_page (kpage, &entry);
     }
   }
 
