@@ -183,7 +183,7 @@ start_process (void *file_name_)
 
   /* Adds return address to stack */
   add_word_to_stack (&if_.esp, (uint32_t) 0);
-
+  
   asm volatile ("movl %0, %%esp; jmp intr_exit" : : "g" (&if_) : "memory");
   NOT_REACHED ();
 }
@@ -617,13 +617,15 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       struct hash *supp_page_table = &thread_current ()->supp_page_table;
       supp_pte old_entry_query;
       old_entry_query.addr = upage;
-      struct hash_elem *old_entry = hash_find (supp_page_table, &old_entry_query.elem);
+      struct hash_elem *old_entry_elem = hash_find (supp_page_table, &old_entry_query.elem);
       
-      if (old_entry != NULL) {
+      if (old_entry_elem != NULL) {
         // Already an entry in the supplementary page table for this address
-        if (hash_entry (old_entry, supp_pte, elem)->read_bytes < page_read_bytes) {
+        supp_pte *old_entry = hash_entry (old_entry_elem, supp_pte, elem);
+        if (old_entry->read_bytes < page_read_bytes) {
           // Replace the old entry because it has less data
-          hash_delete (supp_page_table, old_entry);
+          hash_delete (supp_page_table, old_entry_elem);
+          free (old_entry);
           supp_pte *entry = create_supp_pte (file, ofs, upage, page_read_bytes, page_zero_bytes, writable); 
           hash_insert (supp_page_table, &entry->elem);
         }
@@ -706,13 +708,15 @@ load_page (supp_pte *entry) {
     return false; 
   }
   
-  /*Load data into the page. */
+  /* Load data into the page. */
   if (file_read (entry->file, kpage, entry->read_bytes) != (int) entry->read_bytes)
   {
     free_frame_table_entry_of_page (kpage);
     palloc_free_page (kpage);
     return false; 
   }
+
+  /* Set the remaining bytes of the page to 0 */
   memset (kpage + entry->read_bytes, 0, entry->zero_bytes);
   return true;
 }

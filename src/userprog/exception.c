@@ -17,6 +17,7 @@ static long long page_fault_cnt;
 
 static void kill (struct intr_frame *);
 static void page_fault (struct intr_frame *);
+static void print_page_fault (void *fault_addr, bool not_present, bool write, bool user);
 
 /* Registers handlers for interrupts that can be caused by user
    programs.
@@ -157,33 +158,33 @@ page_fault (struct intr_frame *f)
   */
   bool load_success = false;
   if (not_present) {
-    struct thread *t = thread_current ();
-    
-    supp_pte fault_entry;
-    fault_entry.addr = pg_round_down (fault_addr);
+      struct thread *t = thread_current ();
+      supp_pte fault_entry;
+      fault_entry.addr = pg_round_down (fault_addr);
 
-    struct hash_elem *hash_elem = hash_find (&t->supp_page_table, &fault_entry.elem);
-    if (!hash_elem) {
-      printf ("Page fault at %p: %s error %s page in %s context.\n",
-              fault_addr,
-              not_present ? "not present" : "rights violation",
-              write ? "writing" : "reading",
-              user ? "user" : "kernel");
-      kill (f);
-    } else {
-      supp_pte *entry = hash_entry (hash_elem, supp_pte, elem);
-      load_success = load_page (entry);
-    }
+      struct hash_elem *hash_elem = hash_find (&t->supp_page_table, &fault_entry.elem);
+      if (!hash_elem) {
+         // No entry in the supplemental page table
+         print_page_fault (fault_addr, not_present, write, user);
+         load_success = false;
+         kill (f);
+      } else {
+         supp_pte *entry = hash_entry (hash_elem, supp_pte, elem);
+         load_success = load_page (entry);
+      }
   } 
 
   if (!load_success) {
-    printf ("Page fault at %p: %s error %s page in %s context.\n",
-            fault_addr,
-            not_present ? "not present" : "rights violation",
-            write ? "writing" : "reading",
-            user ? "user" : "kernel");
+    print_page_fault (fault_addr, not_present, write, user);
     kill (f);
   }
 }
 
-
+static void print_page_fault (void *fault_addr, bool not_present, bool write, bool user)
+{
+   printf ("Page fault at %p: %s error %s page in %s context.\n",
+              fault_addr,
+              not_present ? "not present" : "rights violation",
+              write ? "writing" : "reading",
+              user ? "user" : "kernel");
+}
