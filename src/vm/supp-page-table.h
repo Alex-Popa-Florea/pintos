@@ -14,6 +14,7 @@ typedef struct {
   uint32_t read_bytes;           /* No. of bytes that must be read to initialise page */
   uint32_t zero_bytes;           /* Bytes to be zeroed in virtual memory */
   bool writable;                 /* Records if page should be writable or read-only */
+  bool is_dirty;                 /* Records if a page has been modified, and hence needs writing to disk */
 
   struct hash_elem elem;    /* Hash table elem */
 } supp_pte;

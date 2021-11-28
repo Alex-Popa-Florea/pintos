@@ -1,4 +1,5 @@
 #include "userprog/process.h"
+#include "userprog/syscall.h"
 #include <debug.h>
 #include <inttypes.h>
 #include <round.h>
@@ -217,6 +218,13 @@ pcb
     }
   }
   return NULL;
+}
+
+void
+verify_address (const void *vaddr) {
+  if (!is_user_vaddr (vaddr)) {
+    exit (-1);
+  }
 }
 
 int
@@ -606,10 +614,24 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
       size_t page_zero_bytes = PGSIZE - page_read_bytes;
       
-      struct thread *t = thread_current ();
-      supp_pte *entry = create_supp_pte (file, ofs, upage, page_read_bytes, page_zero_bytes, writable); 
-
-      hash_insert (&t->supp_page_table, &entry->elem);
+      struct hash *supp_page_table = &thread_current ()->supp_page_table;
+      supp_pte old_entry_query;
+      old_entry_query.addr = upage;
+      struct hash_elem *old_entry = hash_find (supp_page_table, &old_entry_query.elem);
+      
+      if (old_entry != NULL) {
+        // Already an entry in the supplementary page table for this address
+        if (hash_entry (old_entry, supp_pte, elem)->read_bytes < page_read_bytes) {
+          // Replace the old entry because it has less data
+          hash_delete (supp_page_table, old_entry);
+          supp_pte *entry = create_supp_pte (file, ofs, upage, page_read_bytes, page_zero_bytes, writable); 
+          hash_insert (supp_page_table, &entry->elem);
+        }
+        // Otherwise, the page already present contains more read data so no update is required
+      } else {
+        supp_pte *entry = create_supp_pte (file, ofs, upage, page_read_bytes, page_zero_bytes, writable); 
+        hash_insert (supp_page_table, &entry->elem);
+      }
 
       /* Advance. */
       read_bytes -= page_read_bytes;

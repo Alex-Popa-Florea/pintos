@@ -34,9 +34,6 @@ create_supp_pte (struct file *file, off_t ofs, uint8_t *upage,
   entry->read_bytes = read_bytes;
   entry->zero_bytes = zero_bytes;
   entry->writable = writable;
+  entry->is_dirty = false;
   return entry;
 }
-                   
-
-
-

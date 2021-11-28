@@ -1,4 +1,5 @@
 #include "userprog/syscall.h"
+#include "userprog/process.h"
 #include <stdio.h>
 #include <syscall-nr.h>
 #include <string.h>
@@ -45,7 +46,6 @@ static void tell_wrapper (uint32_t *, int *);
 static void close_wrapper (int *);
 
 static process_file *find_file (int);
-static void verify_address (const void *);
 static void verify_arguments (int *, int);
 static void verify_file_ptr (const void *file);
 static void verify_buffer(const void *buffer, int size);
@@ -417,19 +417,6 @@ find_file (int fd) {
   return NULL;
 }
 
-/*
-  Verifies that the given virutal address is in user space and 
-  in the page directory of the current thread.
-*/
-static void 
-verify_address (const void *vaddr) {
-  if (!is_user_vaddr (vaddr)) {
-    exit (-1);
-  }
-  if (!pagedir_get_page (thread_current ()->pagedir, vaddr)) {
-    exit (-1);
-  }
-}
 
 /* 
   Verifies the address of buffer, even if it lies on multiple pages
