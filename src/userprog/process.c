@@ -607,13 +607,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       size_t page_zero_bytes = PGSIZE - page_read_bytes;
       
       struct thread *t = thread_current ();
-      supp_page_table_entry *entry = (supp_page_table_entry *) malloc (sizeof (supp_page_table_entry));
-      entry->addr = upage;
-      entry->file = file;
-      entry->ofs = ofs;
-      entry->read_bytes = read_bytes;
-      entry->zero_bytes = zero_bytes;
-      entry->writable = writable;
+      supp_pte *entry = create_supp_pte (file, ofs, upage, page_read_bytes, page_zero_bytes, writable); 
 
       hash_insert (&t->supp_page_table, &entry->elem);
 
@@ -673,7 +667,7 @@ set_exit_status (pcb *p, int status) {
 }
 
 bool
-load_page (supp_page_table_entry *entry) {
+load_page (supp_pte *entry) {
   
   /* Get a new page of memory. */
   uint8_t *kpage = try_allocate_page (PAL_USER);

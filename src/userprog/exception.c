@@ -159,7 +159,7 @@ page_fault (struct intr_frame *f)
   if (not_present) {
     struct thread *t = thread_current ();
     
-    supp_page_table_entry fault_entry;
+    supp_pte fault_entry;
     fault_entry.addr = pg_round_down (fault_addr);
 
     struct hash_elem *hash_elem = hash_find (&t->supp_page_table, &fault_entry.elem);
@@ -171,7 +171,7 @@ page_fault (struct intr_frame *f)
               user ? "user" : "kernel");
       kill (f);
     } else {
-      supp_page_table_entry *entry = hash_entry (hash_elem, supp_page_table_entry, elem);
+      supp_pte *entry = hash_entry (hash_elem, supp_pte, elem);
       load_success = load_page (entry);
     }
   } 
