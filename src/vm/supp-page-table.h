@@ -15,7 +15,7 @@ typedef struct {
   uint32_t zero_bytes;           /* Bytes to be zeroed in virtual memory */
   bool writable;                 /* Records if page should be writable or read-only */
 
-  struct hash_elem hash_elem;    /* Hash table elem */
+  struct hash_elem elem;    /* Hash table elem */
 } supp_page_table_entry;
 
 /* 
@@ -28,5 +28,11 @@ unsigned supp_hash(const struct hash_elem *, void *);
     - compares the base addresses (keys) of two hash table entries
 */
 bool supp_hash_compare (const struct hash_elem *, const struct hash_elem *,void *);
+
+
+/* 
+  Used within hash_destroy to free elements of a supp_page_table
+*/
+void destroy_elem (struct hash_elem *e, void *aux);
 
 #endif

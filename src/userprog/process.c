@@ -275,6 +275,8 @@ process_exit (void)
 
   free_frame_table_entries_of_thread (cur);
 
+  hash_destroy (&cur->supp_page_table, &destroy_elem);
+
   /* When a process exits, free all its child processes which have terminated */
   for (e = list_begin (&pcb_list); e != list_end (&pcb_list);) {
     pcb *child_pcb = list_entry (e, pcb, elem);
@@ -604,16 +606,16 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
       size_t page_zero_bytes = PGSIZE - page_read_bytes;
       
-      
       struct thread *t = thread_current ();
-      supp_page_table_entry entry;
-      entry.addr = upage;
-      entry.file = file;
-      entry.ofs = ofs;
-      entry.read_bytes = read_bytes;
-      entry.zero_bytes = zero_bytes;
-      entry.writable = writable;
-      hash_insert (&t->supp_page_table, &entry.hash_elem);
+      supp_page_table_entry *entry = (supp_page_table_entry *) malloc (sizeof (supp_page_table_entry));
+      entry->addr = upage;
+      entry->file = file;
+      entry->ofs = ofs;
+      entry->read_bytes = read_bytes;
+      entry->zero_bytes = zero_bytes;
+      entry->writable = writable;
+
+      hash_insert (&t->supp_page_table, &entry->elem);
 
       /* Advance. */
       read_bytes -= page_read_bytes;
@@ -671,30 +673,31 @@ set_exit_status (pcb *p, int status) {
 }
 
 bool
-load_page (uint8_t *kpage, supp_page_table_entry *entry) {
+load_page (supp_page_table_entry *entry) {
   
-      /* Get a new page of memory. */
-      kpage = try_allocate_page (PAL_USER);
-      if (kpage == NULL){
-        return false;
-      }
+  /* Get a new page of memory. */
+  uint8_t *kpage = try_allocate_page (PAL_USER);
 
-      /* Add the page to the process's address space. */
-      if (!install_page (entry->addr, kpage, entry->writable)) 
-      {
-        free_frame_table_entry_of_page (kpage);
-        palloc_free_page (kpage);
-        return false; 
-      }        
-    
-      /*Load data into the page. */
-    if (file_read (entry->file, kpage, entry->read_bytes) != (int) entry->read_bytes)
-      {
-        free_frame_table_entry_of_page (kpage);
-        palloc_free_page (kpage);
-        return false; 
-      }
-    memset (kpage + entry->read_bytes, 0, entry->zero_bytes);
-    return true;
+  if (kpage == NULL) {
+    return false;
+  }
+  
+  /* Add the page to the process's address space. */
+  if (!install_page (entry->addr, kpage, entry->writable)) 
+  {
+    free_frame_table_entry_of_page (kpage);
+    palloc_free_page (kpage);
+    return false; 
+  }
+  
+  /*Load data into the page. */
+  if (file_read (entry->file, kpage, entry->read_bytes) != (int) entry->read_bytes)
+  {
+    free_frame_table_entry_of_page (kpage);
+    palloc_free_page (kpage);
+    return false; 
+  }
+  memset (kpage + entry->read_bytes, 0, entry->zero_bytes);
+  return true;
 }
 

@@ -78,6 +78,6 @@ void set_exit_status (pcb *, int);
 /*
   Loads a page from Supplemental Page Table of process into memory
 */
-bool load_page (uint8_t *, supp_page_table_entry *);
+bool load_page (supp_page_table_entry *);
 
 #endif /* userprog/process.h */
