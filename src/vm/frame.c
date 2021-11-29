@@ -26,7 +26,7 @@ try_allocate_page (enum palloc_flags flags) {
     lock_acquire (&frame_table_lock);
     list_push_back (&frame_table, &new_frame->elem);
     lock_release (&frame_table_lock);
-  }
+  } 
   return page;
 }
 

@@ -86,6 +86,7 @@ kill (struct intr_frame *f)
      
   /* The interrupt frame's code segment value tells us where the
      exception originated. */
+  
   switch (f->cs)
     {
     case SEL_UCSEG:
@@ -162,14 +163,16 @@ page_fault (struct intr_frame *f)
       supp_pte fault_entry;
       fault_entry.addr = pg_round_down (fault_addr);
 
-      struct hash_elem *hash_elem = hash_find (&t->supp_page_table, &fault_entry.elem);
-      if (!hash_elem) {
+      struct hash_elem *found_elem = hash_find (&t->supp_page_table, &fault_entry.elem);
+      // ASSERT (found_elem != NULL);
+      if (!found_elem) {
+         // debug_backtrace();
          // No entry in the supplemental page table
-         print_page_fault (fault_addr, not_present, write, user);
+         // print_page_fault (fault_addr, not_present, write, user);
          load_success = false;
-         kill (f);
+         // kill (f);
       } else {
-         supp_pte *entry = hash_entry (hash_elem, supp_pte, elem);
+         supp_pte *entry = hash_entry (found_elem, supp_pte, elem);
          load_success = load_page (entry);
       }
   } 

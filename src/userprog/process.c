@@ -26,6 +26,7 @@
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
+static bool stack_init(int argc, char** argv, struct intr_frame* if_);
 
 /*
   Initialise a global list to store all of the pcbs
@@ -33,16 +34,27 @@ static bool load (const char *cmdline, void (**eip) (void), void **esp);
 struct list pcb_list = LIST_INITIALIZER (pcb_list); 
 struct lock pcb_list_lock;
 
+struct Args
+{
+  void* fn_copy;
+  bool success;
+  struct semaphore sema;
+};
+
 tid_t
 process_execute (const char *file_name) 
 {
   char *fn_copy;
   tid_t tid;
 
-  fn_copy = try_allocate_page (0); 
+  fn_copy = palloc_get_page (PAL_ZERO); 
   if (fn_copy == NULL)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
+
+  struct Args args;
+  args.fn_copy = fn_copy;
+  sema_init(&args.sema, 0);
 
   int command_size = strlen(file_name) + 1;
   char str[command_size];
@@ -50,11 +62,18 @@ process_execute (const char *file_name)
   char *strPointer;
   char *arg1 = strtok_r(str, " ", &strPointer);
 
-  tid = thread_create (arg1, PRI_DEFAULT, start_process, fn_copy);
+  tid = thread_create (arg1, PRI_DEFAULT, start_process, &args);
   if (tid == TID_ERROR) {
-    free_frame_table_entry_of_page (fn_copy); 
+    // free_frame_table_entry_of_page (fn_copy); 
     palloc_free_page (fn_copy);
   }
+
+  sema_down(&args.sema);
+  palloc_free_page (fn_copy);
+  if (!args.success) {
+    return TID_ERROR;
+  }
+
   return tid;
 }
 
@@ -62,45 +81,54 @@ process_execute (const char *file_name)
   Function used to check if the stack pointer is decremented out of user space
 */
 static bool check_stack_overflow (void *esp, unsigned long dcr) {
-  return ((int *) esp - dcr) >= (PHYS_BASE - PGSIZE);
+  return ((char *) esp - dcr) >= ((char*)PHYS_BASE - PGSIZE);
 }
 
-static void add_byte_to_stack (void **esp, uint8_t arg) {
-  if (check_stack_overflow (esp, sizeof (uint8_t))) {
-    *esp = *esp - sizeof (uint8_t);
-    *((uint8_t *)*esp) = arg;
-  } else {
-    exit (-1);
+static bool add_byte_to_stack (void **esp, uint8_t arg) {
+  if (!check_stack_overflow (esp, sizeof (uint8_t))) {
+    return false;
   }
+  *esp = *esp - sizeof (uint8_t);
+  *((uint8_t *)*esp) = arg;
+
+  return true;
 }
 
-static void add_word_to_stack (void **esp, uint32_t arg) {
-  if (check_stack_overflow (esp, sizeof (uint32_t))) {
-    *esp = *esp - sizeof (uint32_t);
-    *((uint32_t *)*esp) = arg;
-  } else {
-    exit (-1);
+static bool add_word_to_stack (void **esp, uint32_t arg) {
+  if (!check_stack_overflow (esp, sizeof (uint32_t))) {
+    return false;
   }
+
+  *esp = *esp - sizeof (uint32_t);
+  *((uint32_t *)*esp) = arg;
+
+  return true;
 }
 
-static void add_string_to_stack (void **esp, char *string, int len) {
-  if (check_stack_overflow (esp, sizeof (char) * (len + 1))) {
-    *esp = *esp - sizeof (char) * (len + 1);
-    strlcpy (*esp, string, sizeof (char) * (len + 1));
-  } else {
-    exit (-1);
+static bool add_string_to_stack (void **esp, char *string, int len) {
+  if (!check_stack_overflow (esp, sizeof (char) * (len + 1))) {
+    return false;
   }
+  *esp = *esp - sizeof (char) * (len + 1);
+  strlcpy (*esp, string, sizeof (char) * (len + 1));
+
+  return true;
 }
 
 /*  
   A thread function that loads a user process and starts it running.
 */
 static void
-start_process (void *file_name_)
+start_process (void *args_ptr)
 {
-  char *whole_file = file_name_;
+  struct Args* args = args_ptr;
+
+  char *whole_file = args->fn_copy;
   struct intr_frame if_;
   bool success;
+
+    /* Initialise Supplemental Page Table of process */  
+  hash_init(&thread_current()->supp_page_table, &supp_hash, &supp_hash_compare, NULL);
 
   int file_size = strlen(whole_file) + 1;
 
@@ -139,53 +167,69 @@ start_process (void *file_name_)
   if_.eflags = FLAG_IF | FLAG_MBS;
   success = load (file_name, &if_.eip, &if_.esp);
 
-  free_frame_table_entry_of_page (whole_file);
-  palloc_free_page (whole_file);
+  if (success) {
+    success = stack_init(argc, argv, &if_);
+  }
 
-  lock_acquire (&pcb_list_lock);
-  pcb *parent_pcb = get_pcb_from_id (thread_current ()->parent_id);
-  lock_release (&pcb_list_lock);
-  parent_pcb->load_process_success = success;
-  sema_up (&parent_pcb->load_sema);
+  args->success = success;
+  sema_up (&args->sema);
 
   if (!success) 
     thread_exit ();
+  
+  asm volatile ("movl %0, %%esp; jmp intr_exit" : : "g" (&if_) : "memory");
+  NOT_REACHED ();
+}
 
-  /* Set up the stack with the tokenised arguments */
-
+static bool stack_init(int argc, char** argv, struct intr_frame* if_)
+{
+    /* Set up the stack with the tokenised arguments */
   char *argv_ptrs[argc];
 
   /* Add parsed arguments to stack */
   for (int i = argc - 1; i >= 0; i--) {
     uint32_t len = strlen (argv[i]);
-    add_string_to_stack (&if_.esp, argv[i], len);
-    argv_ptrs[i] = if_.esp;
+    if (!add_string_to_stack (&if_->esp, argv[i], len)) {
+      return false;
+    }
+    argv_ptrs[i] = if_->esp;
   }
 
   /* Add word align buffer to the stack */
-  for (i = (uintptr_t) if_.esp % sizeof (uint32_t); i > 0; i--) {
-    add_byte_to_stack (&if_.esp, (uint8_t) 0);
+  for (int i = (uintptr_t) if_->esp % sizeof (uint32_t); i > 0; i--) {
+    if (!add_byte_to_stack (&if_->esp, (uint8_t) 0)) {
+      return false;
+    }
   }
 
   /* Adds null pointer sentinel to the stack */
-  add_word_to_stack (&if_.esp, (uint8_t) 0);
+  if (!add_word_to_stack (&if_->esp, (uint8_t) 0)) {
+    return false;
+  }
 
   /* Adds addresses of arguments to stack */
   for (int j = argc - 1; j >= 0; j--) {
-    add_word_to_stack (&if_.esp, (uint32_t) argv_ptrs[j]);
+    if (!add_word_to_stack (&if_->esp, (uint32_t) argv_ptrs[j])) {
+      return false;
+    }
   }
 
   /* Adds pointer to the start of argument array to stack */
-  add_word_to_stack (&if_.esp, (uint32_t) if_.esp);
+  if(!add_word_to_stack (&if_->esp, (uint32_t) if_->esp)) {
+    return false;
+  }
 
   /* Adds number of arguments to stack */
-  add_word_to_stack (&if_.esp, (uint32_t) argc);
+  if (!add_word_to_stack (&if_->esp, (uint32_t) argc)) {
+    return false;
+  }
 
   /* Adds return address to stack */
-  add_word_to_stack (&if_.esp, (uint32_t) 0);
-  
-  asm volatile ("movl %0, %%esp; jmp intr_exit" : : "g" (&if_) : "memory");
-  NOT_REACHED ();
+  if (!add_word_to_stack (&if_->esp, (uint32_t) 0)) {
+    return false;
+  }
+
+  return true;
 }
 
 void 
@@ -218,13 +262,6 @@ pcb
     }
   }
   return NULL;
-}
-
-void
-verify_address (const void *vaddr) {
-  if (!is_user_vaddr (vaddr)) {
-    exit (-1);
-  }
 }
 
 int
@@ -448,11 +485,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
     {
       printf ("load: %s: error loading executable\n", file_name);
       goto done; 
-    }
-
-  /* Initialise Supplemental Page Table of process */  
-  hash_init(&t->supp_page_table, &supp_hash, &supp_hash_compare, NULL);
-  
+    }  
   /* Read program headers. */
   file_ofs = ehdr.e_phoff;
   for (i = 0; i < ehdr.e_phnum; i++) 
@@ -623,7 +656,8 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
         // Already an entry in the supplementary page table for this address
         supp_pte *old_entry = hash_entry (old_entry_elem, supp_pte, elem);
         if (old_entry->read_bytes < page_read_bytes) {
-          // Replace the old entry because it has less data
+          // Replace the old entry because it has less data - modify instead?
+          // do or for writeable
           hash_delete (supp_page_table, old_entry_elem);
           free (old_entry);
           supp_pte *entry = create_supp_pte (file, ofs, upage, page_read_bytes, page_zero_bytes, writable); 

@@ -75,14 +75,6 @@ pcb *get_pcb_from_id (tid_t);
 */
 void set_exit_status (pcb *, int);
 
-
-/*
-  Verifies that the given virtual address is in user space, exiting if not
-*/
-void verify_address (const void *);
-
-
-
 /*
   Loads a page from a supplemental page table entry into an active page
 */

@@ -15,10 +15,12 @@ typedef int frame_nr;
   Struct to store an entry in the frame table 
 */
 typedef struct {
-  void *page;
-  struct thread *thread;
+  void *page;                   // need to keep track of where the page is - file, swap space, mmap
+  struct thread *thread;  
+  // store the supp_ptes that use the frame as a list
   struct list_elem elem;
 } frame_table_entry;
+// lock for each frame table entry - as soon as you find entry lock it and release the table
 
 
 /*

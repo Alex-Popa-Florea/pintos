@@ -46,9 +46,10 @@ static void tell_wrapper (uint32_t *, int *);
 static void close_wrapper (int *);
 
 static process_file *find_file (int);
+static void verify_address (const void *);
 static void verify_arguments (int *, int);
-static void verify_file_ptr (const void *file);
-static void verify_buffer(const void *buffer, int size);
+static void verify_file_ptr (const void *);
+static void verify_buffer(const void *, int);
 static void print_termination_output (void);
 
 static void syscall_arr_setup (void);
@@ -133,6 +134,7 @@ exec_wrapper (uint32_t *eax , int *addr) {
 
 pid_t 
 exec (const char *cmd_line) {
+  printf("We reach exec() - line 137.\n");
   verify_address (cmd_line);
   if (!cmd_line) {
     return -1;
@@ -144,8 +146,6 @@ exec (const char *cmd_line) {
   lock_release (&pcb_list_lock);
   pid_t new_process_pid = process_execute (cmd_line);
   ASSERT(current_pcb);
-
-  sema_down (&current_pcb->load_sema);
   
   if (current_pcb->load_process_success) {
     return new_process_pid;
@@ -165,6 +165,7 @@ wait_wrapper (uint32_t *eax, int *addr) {
 
 int 
 wait (pid_t pid) {
+  printf("We reach wait() - line 170.\n");
   return process_wait (pid);
 }
 
@@ -444,6 +445,16 @@ verify_file_ptr (const void *file) {
     i++;
   }
   verify_address (file + i);
+}
+
+/*
+  Verifies that the given virtual address is in user space, exiting if not
+*/
+static void
+verify_address (const void *vaddr) {
+  if (!is_user_vaddr (vaddr)) {
+    exit (-1);
+  }
 }
 
 /* 
