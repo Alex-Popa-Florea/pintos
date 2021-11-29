@@ -494,6 +494,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
 
       if (file_ofs < 0 || file_ofs > file_length (file))
         goto done;
+        
       file_seek (file, file_ofs);
 
       if (file_read (file, &phdr, sizeof phdr) != sizeof phdr)
@@ -655,13 +656,10 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       if (old_entry_elem != NULL) {
         // Already an entry in the supplementary page table for this address
         supp_pte *old_entry = hash_entry (old_entry_elem, supp_pte, elem);
+        old_entry->writable |= writable;
         if (old_entry->read_bytes < page_read_bytes) {
-          // Replace the old entry because it has less data - modify instead?
-          // do or for writeable
-          hash_delete (supp_page_table, old_entry_elem);
-          free (old_entry);
-          supp_pte *entry = create_supp_pte (file, ofs, upage, page_read_bytes, page_zero_bytes, writable); 
-          hash_insert (supp_page_table, &entry->elem);
+          old_entry->read_bytes = page_read_bytes;
+          old_entry->zero_bytes = page_zero_bytes;
         }
         // Otherwise, the page already present contains more read data so no update is required
       } else {
@@ -742,8 +740,13 @@ load_page (supp_pte *entry) {
     return false; 
   }
   
+  lock_acquire(&file_system_lock);
+  file_seek(entry->file, entry->ofs);
   /* Load data into the page. */
-  if (file_read (entry->file, kpage, entry->read_bytes) != (int) entry->read_bytes)
+  off_t bytes_read = file_read (entry->file, kpage, entry->read_bytes);
+  lock_release(&file_system_lock);
+
+  if (bytes_read != (off_t) entry->read_bytes)
   {
     free_frame_table_entry_of_page (kpage);
     palloc_free_page (kpage);
