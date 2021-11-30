@@ -1,0 +1,55 @@
+#ifndef SWAP
+#define SWAP
+
+#include <stdbool.h>
+#include <inttypes.h>
+#include <stddef.h>
+#include "lib/kernel/bitmap.h"
+#include "lib/kernel/hash.h"
+#include "threads/vaddr.h"
+#include "devices/block.h"
+
+/* Calculates number of sectors in BLOCK_SWAP */
+#define NUM_SWAP_BLOCK_SECTORS (block_size (block_get_role (BLOCK_SWAP)) / BLOCK_SECTOR_SIZE)
+
+/* Calculates the number of sectors needed to store a page */
+#define SECTORS_PER_PAGE (PGSIZE / BLOCK_SECTOR_SIZE)
+
+/* Index of first sector of a block */
+#define FIRST_SECTOR (0)
+
+/* Bitmap to record occupancy of swap spaces */
+struct bitmap *sector_bitmap;
+
+/* Swap Table */
+struct hash *swap_table;
+
+/*
+  Struct for an entry in swap table
+*/
+typedef struct {
+	void *page;                 	 /* Start address of page address space (key) */
+	size_t index;                  /* Index of first block sector in device */
+
+  struct hash_elem elem;         /* Hash table elem */
+} swap_entry;
+
+/*
+	Initialise Swap Table hash table and bitmap to represent occupied sectors
+*/
+void initialise_swap_space (void);
+
+/*
+	Writes contents of PAGE to first available contiguous SECTORS_PER_PAGE 
+	sectors in BLOCK_SWAP
+*/
+bool load_page_into_swap_space (void *page);
+
+/* 
+	Populates PAGE from swap space with data corresponding to 
+	supp_pte address ADDR
+*/
+void retrieve_from_swap_space (void *page, uint8_t *addr);
+
+
+#endif
