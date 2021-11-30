@@ -3,6 +3,7 @@
 
 #include "lib/kernel/hash.h"
 #include "filesys/off_t.h"
+#include "filesys/file.h"
 
 /*
   Struct for an entry in a supplemental page table, a hash table

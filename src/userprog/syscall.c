@@ -134,7 +134,6 @@ exec_wrapper (uint32_t *eax , int *addr) {
 
 pid_t 
 exec (const char *cmd_line) {
-  printf("We reach exec() - line 137.\n");
   verify_address (cmd_line);
   if (!cmd_line) {
     return -1;
@@ -144,14 +143,11 @@ exec (const char *cmd_line) {
   lock_acquire (&pcb_list_lock);
   pcb *current_pcb = get_pcb_from_id (thread_current ()->tid);
   lock_release (&pcb_list_lock);
+
   pid_t new_process_pid = process_execute (cmd_line);
-  ASSERT(current_pcb);
   
-  if (current_pcb->load_process_success) {
-    return new_process_pid;
-  } else {
-    return -1;
-  }
+  return new_process_pid;
+  
 
 }
 
@@ -165,7 +161,6 @@ wait_wrapper (uint32_t *eax, int *addr) {
 
 int 
 wait (pid_t pid) {
-  printf("We reach wait() - line 170.\n");
   return process_wait (pid);
 }
 
@@ -452,7 +447,13 @@ verify_file_ptr (const void *file) {
 */
 static void
 verify_address (const void *vaddr) {
+  if (!vaddr) {
+    exit (-1);
+  }
   if (!is_user_vaddr (vaddr)) {
+    exit (-1);
+  }
+  if (!pagedir_get_page (thread_current ()->pagedir, vaddr)) {
     exit (-1);
   }
 }

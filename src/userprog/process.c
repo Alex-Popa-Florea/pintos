@@ -63,13 +63,15 @@ process_execute (const char *file_name)
   char *arg1 = strtok_r(str, " ", &strPointer);
 
   tid = thread_create (arg1, PRI_DEFAULT, start_process, &args);
-  if (tid == TID_ERROR) {
-    // free_frame_table_entry_of_page (fn_copy); 
+  if (tid == TID_ERROR) { 
     palloc_free_page (fn_copy);
+    return TID_ERROR;
   }
 
-  sema_down(&args.sema);
+  sema_down (&args.sema);
+
   palloc_free_page (fn_copy);
+
   if (!args.success) {
     return TID_ERROR;
   }
@@ -128,9 +130,9 @@ start_process (void *args_ptr)
   bool success;
 
     /* Initialise Supplemental Page Table of process */  
-  hash_init(&thread_current()->supp_page_table, &supp_hash, &supp_hash_compare, NULL);
+  hash_init (&thread_current ()->supp_page_table, &supp_hash, &supp_hash_compare, NULL);
 
-  int file_size = strlen(whole_file) + 1;
+  int file_size = strlen (whole_file) + 1;
 
   /* Calculate the number of command line arguments */
   int argc = 0; 
@@ -168,14 +170,14 @@ start_process (void *args_ptr)
   success = load (file_name, &if_.eip, &if_.esp);
 
   if (success) {
-    success = stack_init(argc, argv, &if_);
+    success = stack_init (argc, argv, &if_);
   }
 
   args->success = success;
   sema_up (&args->sema);
 
   if (!success) 
-    thread_exit ();
+    exit (-1);
   
   asm volatile ("movl %0, %%esp; jmp intr_exit" : : "g" (&if_) : "memory");
   NOT_REACHED ();
@@ -724,14 +726,14 @@ set_exit_status (pcb *p, int status) {
 
 bool
 load_page (supp_pte *entry) {
-  
+
   /* Get a new page of memory. */
   uint8_t *kpage = try_allocate_page (PAL_USER);
 
   if (kpage == NULL) {
     return false;
   }
-  
+
   /* Add the page to the process's address space. */
   if (!install_page (entry->addr, kpage, entry->writable)) 
   {

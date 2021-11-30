@@ -158,22 +158,18 @@ page_fault (struct intr_frame *f)
    loads the page from the current thread's supplemental page table
   */
   bool load_success = false;
-  if (not_present) {
+  if (not_present && fault_addr > (void *) 0x08048000 && is_user_vaddr(fault_addr)) {
       struct thread *t = thread_current ();
       supp_pte fault_entry;
       fault_entry.addr = pg_round_down (fault_addr);
 
       struct hash_elem *found_elem = hash_find (&t->supp_page_table, &fault_entry.elem);
-      // ASSERT (found_elem != NULL);
       if (!found_elem) {
-         // debug_backtrace();
-         // No entry in the supplemental page table
-         // print_page_fault (fault_addr, not_present, write, user);
-         load_success = false;
-         // kill (f);
+        // No entry in the supplemental page table
+        load_success = false;
       } else {
-         supp_pte *entry = hash_entry (found_elem, supp_pte, elem);
-         load_success = load_page (entry);
+        supp_pte *entry = hash_entry (found_elem, supp_pte, elem);
+        load_success = load_page (entry);
       }
   } 
 
@@ -183,7 +179,8 @@ page_fault (struct intr_frame *f)
   }
 }
 
-static void print_page_fault (void *fault_addr, bool not_present, bool write, bool user)
+static void 
+print_page_fault (void *fault_addr, bool not_present, bool write, bool user)
 {
    printf ("Page fault at %p: %s error %s page in %s context.\n",
               fault_addr,
