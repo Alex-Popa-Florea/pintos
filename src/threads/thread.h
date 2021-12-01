@@ -110,9 +110,13 @@ struct thread
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
     int parent_id;                      /* Id of the thread's parent */ 
+
     int current_file_descriptor;        /* Stores the file descriptor of the last file opened or used. */  
     struct list file_list;              /* Stores the list of files opened by the thread. */
     struct file *executable_file;       /* Pointer to the file the thread is executing. */
+
+    int current_mmapped_id;              /* Stores the mmapped id of the last file mapped */  
+    struct list mmapped_file_list;       /* Stores the list of files mapped by the thread. */
 #endif
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */

@@ -9,7 +9,7 @@
 enum source {
   MMAP,                          /* Loading from a memory mapped filed */   
   STACK,                         /* Stack Page */  
-  SWAP,                          /* Page stored on swap space */
+  SWAP_SPACE,                          /* Page stored on swap space */
   DISK                           /* Stored on file system */
 };
 

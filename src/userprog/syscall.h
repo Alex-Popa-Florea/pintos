@@ -3,6 +3,7 @@
 
 #include "lib/user/syscall.h"
 #include <list.h>
+#include "vm/supp-page-table.h"
 
 /* Current number of system call functions recognised in Pintos */
 #define NUM_SYSCALLS (20) 
@@ -16,6 +17,16 @@ typedef struct
     int file_descriptor;
     struct list_elem file_elem;
 } process_file;
+
+/*
+    Struct to map supplemental page table entries for memory mapped files to mapids
+*/
+typedef struct
+{
+    supp_pte *entry;
+    mapid_t mapping;
+    struct list_elem mapped_elem;
+} mapped_file;
 
 /*
     Generic type for system call functions
@@ -114,5 +125,16 @@ unsigned tell (int fd);
   System call that closes file descriptor fd 
 */
 void close (int fd);
+
+/* 
+  System call that mapps opened file in memory at address addr.
+*/
+mapid_t mmap (int fd, void *addr);
+
+/* 
+  System call that unmapps file of mapid mapping from memory.
+*/
+void munmap (mapid_t mapping);
+
 
 #endif /* userprog/syscall.h */

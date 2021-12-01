@@ -83,7 +83,7 @@ process_execute (const char *file_name)
   Function used to check if the stack pointer is decremented out of user space
 */
 static bool check_stack_overflow (void *esp, unsigned long dcr) {
-  return ((char *) esp - dcr) >= ((char*)PHYS_BASE - PGSIZE);
+  return ((char *) esp - dcr) >= ((char*) PHYS_BASE - PGSIZE);
 }
 
 static bool add_byte_to_stack (void **esp, uint8_t arg) {
@@ -318,6 +318,15 @@ process_exit (void)
     list_remove (e);
     free (current_file);
   }
+
+  struct list *mapped_list = &cur->mmapped_file_list;
+
+  while (!list_empty (mapped_list)) {
+    e = list_pop_front (mapped_list);
+    mapped_file *current_file = list_entry (e, mapped_file, mapped_elem);
+    munmap (current_file->mapping);
+  }
+
   lock_release (&file_system_lock);
 
   free_frame_table_entries_of_thread (cur);
@@ -572,7 +581,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
 
 /* load() helpers. */
 
-static bool install_page (void *upage, void *kpage, bool writable);
+//static bool install_page (void *upage, void *kpage, bool writable);
 
 /* Checks whether PHDR describes a valid, loadable segment in
    FILE and returns true if so, false otherwise. */
@@ -680,26 +689,43 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
   return true;
 }
 
+
+struct hash_elem *
+setup_pte_for_stack (void *upage) {
+  supp_pte *entry = (supp_pte *) malloc (sizeof (supp_pte));
+  if (!entry) {
+    return NULL;
+  }
+  entry->addr = pg_round_down (upage);
+  entry->writable = true;
+  entry->page_source = STACK;
+  hash_insert (&thread_current ()->supp_page_table, &entry->elem);
+  return &entry->elem;
+}
+
 /* Create a minimal stack by mapping a zeroed page at the top of
    user virtual memory. */
 static bool
 setup_stack (void **esp) 
 {
-  uint8_t *kpage;
-  bool success = false;
+  struct hash_elem *entry_elem = setup_pte_for_stack (((uint8_t *) PHYS_BASE) - PGSIZE);
+  
+  if (!entry_elem) {
+    return false;
+  }
 
-  kpage = try_allocate_page (PAL_USER | PAL_ZERO);
-  if (kpage != NULL) 
-    {
-      success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
-      if (success)
-        *esp = PHYS_BASE;
-      else {
-        free_frame_table_entry_of_page (kpage);
-        palloc_free_page (kpage);
-      }
-    } 
-  return success;
+  supp_pte *entry = hash_entry (entry_elem, supp_pte, elem);
+  
+  bool success = load_stack_page (entry);
+
+  if (success) {
+    *esp = PHYS_BASE;
+  } else {
+    hash_delete (&thread_current ()->supp_page_table, entry_elem);
+    free (entry);
+    return false;
+  }
+  return true;
 }
 
 /* Adds a mapping from user virtual address UPAGE to kernel
@@ -711,7 +737,7 @@ setup_stack (void **esp)
    with palloc_get_page().
    Returns true on success, false if UPAGE is already mapped or
    if memory allocation fails. */
-static bool
+bool
 install_page (void *upage, void *kpage, bool writable)
 {
   struct thread *t = thread_current ();
@@ -725,41 +751,5 @@ install_page (void *upage, void *kpage, bool writable)
 void 
 set_exit_status (pcb *p, int status) {
   p->exit_status = status;
-}
-
-bool
-load_page (supp_pte *entry) {
-
-  /* Get a new page of memory. */
-  uint8_t *kpage = try_allocate_page (PAL_USER);
-
-  if (kpage == NULL) {
-    return false;
-  }
-
-  /* Add the page to the process's address space. */
-  if (!install_page (entry->addr, kpage, entry->writable)) 
-  {
-    free_frame_table_entry_of_page (kpage);
-    palloc_free_page (kpage);
-    return false; 
-  }
-  
-  lock_acquire(&file_system_lock);
-  file_seek(entry->file, entry->ofs);
-  /* Load data into the page. */
-  off_t bytes_read = file_read (entry->file, kpage, entry->read_bytes);
-  lock_release(&file_system_lock);
-
-  if (bytes_read != (off_t) entry->read_bytes)
-  {
-    free_frame_table_entry_of_page (kpage);
-    palloc_free_page (kpage);
-    return false; 
-  }
-
-  /* Set the remaining bytes of the page to 0 */
-  memset (kpage + entry->read_bytes, 0, entry->zero_bytes);
-  return true;
 }
 

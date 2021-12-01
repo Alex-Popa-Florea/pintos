@@ -383,6 +383,110 @@ close (int fd) {
   return;
 }
 
+mapid_t 
+mmap (int fd, void *addr) {
+
+  if (fd == 0 || fd == 1 || addr == NULL) {
+    return MAP_FAILED;
+  }
+
+  if ((int) addr % PGSIZE != 0) {
+    return MAP_FAILED;
+  }
+
+  if (!is_user_vaddr (addr)) {
+    return MAP_FAILED;
+  }
+
+  lock_acquire (&file_system_lock);
+
+  process_file *process_file = find_file (fd);
+  if (!process_file) {
+    lock_release (&file_system_lock);
+    return MAP_FAILED;
+  }
+  struct file *reopened_file = file_reopen (process_file->file);
+  int length = file_length (reopened_file);
+  if (length <= 0) {
+    lock_release (&file_system_lock);
+    return MAP_FAILED;
+  }
+
+  int page_count = length / PGSIZE;
+
+  for (int i = 0; i < page_count; i++) {
+    void *page = addr + PGSIZE * i;
+    
+  }
+
+  mapid_t id = thread_current ()->current_mmapped_id;
+
+  off_t ofs = 0;
+  uint32_t read_bytes = length;
+
+  while (read_bytes > 0) {
+    size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
+    size_t page_zero_bytes = PGSIZE - page_read_bytes;
+
+    mapped_file *new_mapped_file = (mapped_file *) malloc (sizeof (mapped_file));
+    if (!new_mapped_file) {
+      return MAP_FAILED;
+    }
+
+    supp_pte *entry = create_supp_pte (reopened_file, ofs, addr, page_read_bytes, page_zero_bytes, true, MMAP);
+    hash_insert (&thread_current ()->supp_page_table, &entry->elem);
+
+    new_mapped_file->entry = entry;
+    new_mapped_file->mapping = id;
+    list_push_back (&thread_current ()->mmapped_file_list, &new_mapped_file->mapped_elem);
+    
+    read_bytes -= page_read_bytes;
+    addr += PGSIZE;
+    ofs += PGSIZE;
+  }
+
+  lock_release (&file_system_lock);
+
+  thread_current ()->current_mmapped_id++;
+  return id;
+}
+
+void 
+munmap (mapid_t mapping) {
+  
+  if (mapping <= 0) {
+    return;
+  }
+
+  struct list *mapped_list = &thread_current ()->mmapped_file_list;
+  
+  if (list_empty (mapped_list)) {
+    return;
+  }
+
+  struct list_elem *e;
+  for (e = list_begin (mapped_list); e != list_end (mapped_list);) {
+    mapped_file *current_mapped_file = list_entry (e, mapped_file, mapped_elem);
+    if (current_mapped_file->mapping == mapping) {
+      supp_pte *entry = current_mapped_file->entry;
+      file_seek (entry->file, 0);
+
+      if (pagedir_is_dirty (thread_current ()->pagedir, entry->addr)) {
+        uint32_t bytes_written = file_write_at (entry->file, entry->addr, entry->read_bytes, entry->ofs);
+      }
+
+      hash_delete (&thread_current ()->supp_page_table, &entry->elem);
+      free (entry);
+      
+      e = list_remove (e);
+      free (current_mapped_file);
+    } else {
+      e = list_next (e);
+    }
+  }
+}
+
+
 /* 
   Finds file with file descriptor fd in the file system.
   Returns pointer to the file, or NULL if file cannot be found. 

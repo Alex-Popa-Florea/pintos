@@ -241,16 +241,13 @@ thread_create (const char *name, int priority,
   #ifdef USERPROG
     t->parent_id = thread_current ()->tid;
     pcb * current_pcb = (pcb *) malloc (sizeof(pcb));
-
-    if (thread_current () == initial_thread) {
+    lock_acquire (&pcb_list_lock);
+    if (!get_pcb_from_id (thread_current ()->tid)) {
       pcb * parent_pcb = (pcb *) malloc (sizeof(pcb));
       init_pcb (parent_pcb, thread_current ()->tid, CHILDLESS_PARENT_ID);
-      lock_acquire (&pcb_list_lock);
       list_push_back (&pcb_list, &parent_pcb->elem);
-      lock_release (&pcb_list_lock);
     }
     init_pcb (current_pcb, tid, thread_current ()->tid);
-    lock_acquire (&pcb_list_lock);
     list_push_back (&pcb_list, &current_pcb->elem);
     lock_release (&pcb_list_lock);
   #endif
@@ -614,6 +611,9 @@ init_thread (struct thread *t, const char *name, int priority)
     list_init (&t->file_list);
     t->current_file_descriptor = 2;
     t->executable_file = NULL;
+
+    list_init (&t->mmapped_file_list);
+    t->current_mmapped_id = 0;
   #endif
 
   old_level = intr_disable ();

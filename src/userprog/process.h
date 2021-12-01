@@ -75,6 +75,12 @@ pcb *get_pcb_from_id (tid_t);
 */
 void set_exit_status (pcb *, int);
 
+
+bool install_page (void *upage, void *kpage, bool writable);
+
+/* Create a supplemental page table entry for a stack page */
+struct hash_elem *setup_pte_for_stack (void *upage);
+
 /*
   Loads a page from a supplemental page table entry into an active page
 */

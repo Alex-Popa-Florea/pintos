@@ -11,6 +11,10 @@
 #include "userprog/pagedir.h"
 #include "userprog/process.h"
 #include "threads/vaddr.h"
+#include "userprog/process.h"
+#include "vm/frame.h"
+#include "vm/swap.h"
+#include "string.h"
 
 /* Number of page faults processed. */
 static long long page_fault_cnt;
@@ -169,10 +173,35 @@ page_fault (struct intr_frame *f)
         load_success = false;
       } else {
         supp_pte *entry = hash_entry (found_elem, supp_pte, elem);
-        // add in a switch statement to handle different sources of pages
-        load_success = load_page (entry);
+        switch (entry->page_source)
+        {
+        case MMAP:
+          load_success = load_mmap_page (entry);
+          break;
+        
+        case STACK:
+          load_success = load_stack_page (entry);
+          break;
+        
+        case SWAP_SPACE:
+          load_success = load_page_into_swap_space (entry);
+          break;
+
+        case DISK:
+          load_success = load_page (entry);
+          break;
+
+        default:
+          break;
+        }
       }
   } 
+
+  if ((PHYS_BASE - pg_round_down (fault_addr)) <= (8000000) && (uint32_t*) fault_addr >= (f->esp - 32) && is_user_vaddr(fault_addr)) {
+    struct hash_elem *entry_elem = setup_pte_for_stack (fault_addr);
+    supp_pte *entry = hash_entry (entry_elem, supp_pte, elem);
+    load_success = load_stack_page (entry);
+  }
 
   if (!load_success) {
     print_page_fault (fault_addr, not_present, write, user);
@@ -188,4 +217,87 @@ print_page_fault (void *fault_addr, bool not_present, bool write, bool user)
               not_present ? "not present" : "rights violation",
               write ? "writing" : "reading",
               user ? "user" : "kernel");
+}
+
+bool
+load_page (supp_pte *entry) {
+
+  /* Get a new page of memory. */
+  uint8_t *kpage = try_allocate_page (PAL_USER);
+
+  if (kpage == NULL) {
+    return false;
+  }
+
+  /* Add the page to the process's address space. */
+  if (!install_page (entry->addr, kpage, entry->writable)) {
+    free_frame_table_entry_of_page (kpage);
+    palloc_free_page (kpage);
+    return false; 
+  }
+  
+  lock_acquire (&file_system_lock);
+  file_seek (entry->file, entry->ofs);
+  /* Load data into the page. */
+  off_t bytes_read = file_read (entry->file, kpage, entry->read_bytes);
+  lock_release (&file_system_lock);
+
+  if (bytes_read != (off_t) entry->read_bytes) {
+    free_frame_table_entry_of_page (kpage);
+    palloc_free_page (kpage);
+    return false; 
+  }
+
+  /* Set the remaining bytes of the page to 0 */
+  memset (kpage + entry->read_bytes, 0, entry->zero_bytes);
+  return true;
+}
+
+bool 
+load_stack_page (supp_pte *entry) {
+
+  uint8_t *kpage = try_allocate_page (PAL_USER);
+
+  if (!kpage) {
+    return false;
+  }
+  
+  if (!install_page (entry->addr, kpage, entry->writable)) {
+    free_frame_table_entry_of_page (kpage);
+    palloc_free_page (kpage);
+    return false;
+  }
+
+  return true;
+}
+
+bool
+load_mmap_page (supp_pte *entry) {
+
+  uint8_t *kpage = try_allocate_page (PAL_USER | PAL_ZERO);
+  if (kpage == NULL) {
+    return false;
+  }
+
+  /* Add the page to the process's address space. */
+  if (!install_page (entry->addr, kpage, entry->writable)) {
+    free_frame_table_entry_of_page (kpage);
+    palloc_free_page (kpage);
+    return false; 
+  }
+  
+  lock_acquire (&file_system_lock);
+  file_seek (entry->file, entry->ofs);
+  /* Load data into the page. */
+  off_t bytes_read = file_read (entry->file, kpage, entry->read_bytes);
+  lock_release (&file_system_lock);
+
+  if (bytes_read != (off_t) entry->read_bytes) {
+    free_frame_table_entry_of_page (kpage);
+    palloc_free_page (kpage);
+    return false; 
+  }
+
+  /* Set the remaining bytes of the page to 0 */
+  memset (kpage + entry->read_bytes, 0, entry->zero_bytes);
 }
