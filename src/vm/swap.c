@@ -28,7 +28,7 @@ bool load_page_into_swap_space (void *page) {
         Finds first contiguous sectors of BLOCK_SWAP to store whole page
     */
     size_t index = bitmap_scan_and_flip (sector_bitmap, FIRST_SECTOR, SECTORS_PER_PAGE, false);
-    if (index != BITMAP_ERROR) {
+    if (index == BITMAP_ERROR) {
         return false;
     }
 

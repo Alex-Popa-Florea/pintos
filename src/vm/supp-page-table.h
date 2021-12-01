@@ -5,6 +5,14 @@
 #include "filesys/off_t.h"
 #include "filesys/file.h"
 
+/* Enum to represent source of page */
+enum source {
+  MMAP,                          /* Loading from a memory mapped filed */   
+  STACK,                         /* Stack Page */  
+  SWAP,                          /* Page stored on swap space */
+  DISK                           /* Stored on file system */
+};
+
 /*
   Struct for an entry in a supplemental page table, a hash table
 */
@@ -16,9 +24,11 @@ typedef struct {
   uint32_t zero_bytes;           /* Bytes to be zeroed in virtual memory */
   bool writable;                 /* Records if page should be writable or read-only */
   bool is_dirty;                 /* Records if a page has been modified, and hence needs writing to disk */
+  enum source page_source;             /* Records the source of the page */
 
   struct hash_elem elem;    /* Hash table elem */
 } supp_pte;
+
 
 /* 
   Hash function for Supplemental Page Table 
@@ -38,6 +48,6 @@ bool supp_hash_compare (const struct hash_elem *, const struct hash_elem *,void 
 void destroy_elem (struct hash_elem *e, void *aux);
 
 supp_pte *create_supp_pte (struct file *, off_t, uint8_t *,
-                           uint32_t, uint32_t, bool);
+                           uint32_t, uint32_t, bool, enum source);
 
 #endif

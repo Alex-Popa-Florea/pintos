@@ -667,7 +667,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
         }
         /* Otherwise, the page already present contains more read data so no update is required */
       } else {
-        supp_pte *entry = create_supp_pte (file, ofs, upage, page_read_bytes, page_zero_bytes, writable); 
+        supp_pte *entry = create_supp_pte (file, ofs, upage, page_read_bytes, page_zero_bytes, writable, DISK); 
         hash_insert (supp_page_table, &entry->elem);
       }
 

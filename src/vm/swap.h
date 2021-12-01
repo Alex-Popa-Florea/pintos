@@ -61,5 +61,4 @@ bool load_page_into_swap_space (void *page);
 */
 void retrieve_from_swap_space (void *page, uint8_t *addr);
 
-
 #endif
