@@ -1,5 +1,6 @@
 #include "swap.h"
 #include "threads/malloc.h"
+#include "threads/synch.h"
 #include <debug.h>
 
 
@@ -13,14 +14,23 @@ void initialise_swap_space (void) {
     /* Initialise hash table */
     bool hash_created = hash_init (swap_table, swap_hash, swap_hash_compare, NULL);
     ASSERT (hash_created);
+
+    /* Initialise swap table and bitmap lock */
+    lock_init (&swap_table_lock);
+    lock_init (&bitmap_lock);
 }
 
 bool load_page_into_swap_space (void *page) {
+    lock_acquire (&bitmap_lock);
+    lock_acquire (&swap_table_lock);
+
     /*
         Finds first contiguous sectors of BLOCK_SWAP to store whole page
     */
     size_t index = bitmap_scan_and_flip (sector_bitmap, FIRST_SECTOR, SECTORS_PER_PAGE, false);
-    ASSERT (index != BITMAP_ERROR);
+    if (index != BITMAP_ERROR) {
+        return false;
+    }
 
     /* Insert first sector into swap table */
     swap_entry *new_entry = (swap_entry *) malloc (sizeof (swap_entry));
@@ -38,9 +48,16 @@ bool load_page_into_swap_space (void *page) {
         block_write (swap_block, index, start_addr);
         index++;
     }
+    
+    lock_release (&swap_table_lock);
+    lock_release (&bitmap_lock);
+
+    return true;
 }
 
 void retrieve_from_swap_space (void *page, uint8_t *addr) {
+    lock_acquire (&swap_table_lock);
+
     void *start_addr = page;
     struct block *swap_block = block_get_role (BLOCK_SWAP);
     swap_entry entry;
@@ -50,7 +67,7 @@ void retrieve_from_swap_space (void *page, uint8_t *addr) {
         Find index of first sector of page from swap table 
     */
     struct hash_elem *found_elem = hash_find (swap_table, &entry.elem);
-    size_t index = hash_entry (found_elem, swap_entry, elem);
+    size_t index = hash_entry (found_elem, swap_entry, elem)->index;
 
     /* 
         Reads each sector of page from BLOCK_SWAP into page buffer
@@ -66,6 +83,8 @@ void retrieve_from_swap_space (void *page, uint8_t *addr) {
     }
     struct hash_elem *deleted = hash_delete (swap_table, found_elem);
     free (hash_entry (deleted, swap_entry, elem));
+
+    lock_release (&swap_table_lock);
 }
 
 /* 

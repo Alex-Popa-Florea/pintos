@@ -30,7 +30,7 @@ struct list frame_table;
 
 
 /*
-  Lock to ensure synchronized access to the page table
+  Lock to ensure synchronized access to the frame table
 */
 struct lock frame_table_lock;
 

@@ -35,6 +35,16 @@ typedef struct {
 } swap_entry;
 
 /*
+  Lock to ensure synchronized access to the swap table
+*/
+struct lock swap_table_lock;
+
+/*
+  Lock to ensure synchronized access to the bitmap
+*/
+struct lock bitmap_lock;
+
+/*
 	Initialise Swap Table hash table and bitmap to represent occupied sectors
 */
 void initialise_swap_space (void);
