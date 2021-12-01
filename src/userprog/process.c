@@ -655,6 +655,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       old_entry_query.addr = upage;
       struct hash_elem *old_entry_elem = hash_find (supp_page_table, &old_entry_query.elem);
       
+      
       if (old_entry_elem != NULL) {
         // Already an entry in the supplementary page table for this address
         supp_pte *old_entry = hash_entry (old_entry_elem, supp_pte, elem);
@@ -673,6 +674,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       read_bytes -= page_read_bytes;
       zero_bytes -= page_zero_bytes;
       upage += PGSIZE;
+      ofs += PGSIZE;
     }
   return true;
 }
