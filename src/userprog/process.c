@@ -632,7 +632,8 @@ validate_segment (const struct Elf32_Phdr *phdr, struct file *file)
    user process if WRITABLE is true, read-only otherwise.
 
    Return true if successful, false if a memory allocation error
-   or disk read error occurs. */
+   or disk read error occurs. 
+*/
 static bool
 load_segment (struct file *file, off_t ofs, uint8_t *upage,
               uint32_t read_bytes, uint32_t zero_bytes, bool writable) 
@@ -657,14 +658,14 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       
       
       if (old_entry_elem != NULL) {
-        // Already an entry in the supplementary page table for this address
+        /* Already an entry in the supplementary page table for this address */
         supp_pte *old_entry = hash_entry (old_entry_elem, supp_pte, elem);
         old_entry->writable |= writable;
         if (old_entry->read_bytes < page_read_bytes) {
           old_entry->read_bytes = page_read_bytes;
           old_entry->zero_bytes = page_zero_bytes;
         }
-        // Otherwise, the page already present contains more read data so no update is required
+        /* Otherwise, the page already present contains more read data so no update is required */
       } else {
         supp_pte *entry = create_supp_pte (file, ofs, upage, page_read_bytes, page_zero_bytes, writable); 
         hash_insert (supp_page_table, &entry->elem);
