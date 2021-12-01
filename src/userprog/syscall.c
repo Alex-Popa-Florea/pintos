@@ -139,16 +139,9 @@ exec (const char *cmd_line) {
     return -1;
   } 
 
-  /* Block the current process until it knows the success of the child process load */
-  lock_acquire (&pcb_list_lock);
-  pcb *current_pcb = get_pcb_from_id (thread_current ()->tid);
-  lock_release (&pcb_list_lock);
-
   pid_t new_process_pid = process_execute (cmd_line);
   
   return new_process_pid;
-  
-
 }
 
 /* 

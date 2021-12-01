@@ -35,6 +35,6 @@ create_supp_pte (struct file *file, off_t ofs, uint8_t *upage,
   entry->zero_bytes = zero_bytes;
   entry->writable = writable;
   entry->is_dirty = false;
-  entry->source = source;
+  entry->page_source = source;
   return entry;
 }
