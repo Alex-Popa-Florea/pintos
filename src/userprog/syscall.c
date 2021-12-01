@@ -44,6 +44,8 @@ static void write_wrapper (uint32_t *, int *);
 static void seek_wrapper (int *);
 static void tell_wrapper (uint32_t *, int *);
 static void close_wrapper (int *);
+static void mmap_wrapper (uint32_t *, int *);
+static void munmap_wrapper (int *);
 
 static process_file *find_file (int);
 static void verify_address (const void *);
@@ -383,6 +385,14 @@ close (int fd) {
   return;
 }
 
+/* 
+  Wrapper function to execute mmap() system call 
+*/
+static void
+mmap_wrapper (uint32_t *eax, int *addr) {
+  *eax = mmap ((int) *(addr + 1), (void *) *(addr + 2));
+}
+
 mapid_t 
 mmap (int fd, void *addr) {
 
@@ -449,6 +459,14 @@ mmap (int fd, void *addr) {
 
   thread_current ()->current_mmapped_id++;
   return id;
+}
+
+/* 
+  Wrapper function to execute munmap() system call 
+*/
+static void
+munmap_wrapper (int *addr) {
+  munmap ((mapid_t) *(addr + 1));
 }
 
 void 
@@ -661,6 +679,18 @@ static void syscall_arr_setup(void) {
         info.has_return = false;
         break;
       
+      case SYS_MMAP:
+        info.num_args = 2;
+        info.func = &mmap_wrapper;
+        info.has_return = true;
+        break;
+
+      case SYS_MUNMAP:
+        info.num_args = 1;
+        info.func = &munmap_wrapper;
+        info.has_return = false;
+        break;
+        
       default:
         break;
     }
