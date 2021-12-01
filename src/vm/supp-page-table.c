@@ -25,7 +25,7 @@ destroy_elem (struct hash_elem *e, void *aux UNUSED) {
 
 supp_pte *
 create_supp_pte (struct file *file, off_t ofs, uint8_t *upage,
-                 uint32_t read_bytes, uint32_t zero_bytes, bool writable) 
+                 uint32_t read_bytes, uint32_t zero_bytes, bool writable, enum source source) 
 {
   supp_pte *entry = (supp_pte *) malloc (sizeof (supp_pte));
   entry->addr = upage;
@@ -35,5 +35,6 @@ create_supp_pte (struct file *file, off_t ofs, uint8_t *upage,
   entry->zero_bytes = zero_bytes;
   entry->writable = writable;
   entry->is_dirty = false;
+  entry->source = source;
   return entry;
 }

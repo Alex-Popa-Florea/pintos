@@ -158,7 +158,7 @@ page_fault (struct intr_frame *f)
    loads the page from the current thread's supplemental page table
   */
   bool load_success = false;
-  if (not_present && fault_addr > (void *) 0x08048000 && is_user_vaddr(fault_addr)) {
+  if (not_present && is_user_vaddr(fault_addr)) {
       struct thread *t = thread_current ();
       supp_pte fault_entry;
       fault_entry.addr = pg_round_down (fault_addr);
@@ -169,6 +169,7 @@ page_fault (struct intr_frame *f)
         load_success = false;
       } else {
         supp_pte *entry = hash_entry (found_elem, supp_pte, elem);
+        // add in a switch statement to handle different sources of pages
         load_success = load_page (entry);
       }
   } 

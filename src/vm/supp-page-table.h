@@ -16,9 +16,18 @@ typedef struct {
   uint32_t zero_bytes;           /* Bytes to be zeroed in virtual memory */
   bool writable;                 /* Records if page should be writable or read-only */
   bool is_dirty;                 /* Records if a page has been modified, and hence needs writing to disk */
+  enum source source;             /* Records the source of the page */
 
   struct hash_elem elem;    /* Hash table elem */
 } supp_pte;
+
+/* Enum to represent source of page */
+enum source {
+  MMAP,                          /* Loading from a memory mapped filed */   
+  STACK,                         /* Stack Page */  
+  SWAP,                          /* Page stored on swap space */
+  FILESYS                        /* Stored on file system */
+};
 
 /* 
   Hash function for Supplemental Page Table 
@@ -38,6 +47,6 @@ bool supp_hash_compare (const struct hash_elem *, const struct hash_elem *,void 
 void destroy_elem (struct hash_elem *e, void *aux);
 
 supp_pte *create_supp_pte (struct file *, off_t, uint8_t *,
-                           uint32_t, uint32_t, bool);
+                           uint32_t, uint32_t, bool, enum source);
 
 #endif
