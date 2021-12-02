@@ -4,6 +4,7 @@
 #include "threads/palloc.h"
 #include "lib/kernel/list.h"
 #include "threads/thread.h"
+#include "threads/synch.h"
 
 /*
   Type for the number which identifies an allocated page
@@ -15,12 +16,9 @@ typedef int frame_nr;
   Struct to store an entry in the frame table 
 */
 typedef struct {
-  void *page;                   // need to keep track of where the page is - file, swap space, mmap
-  struct thread *thread;  
-  // store the supp_ptes that use the frame as a list
+  void *page;                
   struct list_elem elem;
 } frame_table_entry;
-// lock for each frame table entry - as soon as you find entry lock it and release the table
 
 
 /*
@@ -43,20 +41,20 @@ void init_frame_table (void);
 
 /*
   Tries to allocate a page of memory using the flags provided
-  Returns the pointer to page if successful, otherwise NULL
+  Returns the pointer to page frame if successful, otherwise NULL
 */
-void *try_allocate_page (enum palloc_flags);
+frame_table_entry *try_allocate_page (enum palloc_flags);
+
+
+/* Frees the given page and its corresponding frame table entry */
+void free_frame_table_entry_from_page (void* page);
 
 
 /*
-  Frees the memory occupied by a frame table entry
+  Frees the given page in a thread's supplemental page table 
+  and its corresponding frame table entry
 */
-void free_frame_table_entry (frame_table_entry *);
-
-/*
-  Frees the memory for a given page and its frame table entry
-*/
-void free_frame_table_entry_of_page (void*);
+void free_frame_from_supp_pte (struct hash_elem *e, void *aux UNUSED);
 
 
 /*

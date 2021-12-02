@@ -1,13 +1,17 @@
 #include "vm/frame.h"
 
+#include "debug.h"
 #include "threads/malloc.h"
 #include "threads/palloc.h"
 #include "lib/kernel/list.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
 #include "threads/thread.h"
+#include "vm/supp-page-table.h"
 
 struct list frame_table;
+
+static void free_frame_table_entry (frame_table_entry *);
 
 void 
 init_frame_table (void) {
@@ -15,62 +19,66 @@ init_frame_table (void) {
   lock_init (&frame_table_lock);
 }
 
-void *
+frame_table_entry *
 try_allocate_page (enum palloc_flags flags) {
   void *page = palloc_get_page (flags);
 
   if (page) {
     frame_table_entry *new_frame = (frame_table_entry *) malloc (sizeof (frame_table_entry));
     new_frame->page = page;
-    new_frame->thread = thread_current ();
     lock_acquire (&frame_table_lock);
     list_push_back (&frame_table, &new_frame->elem);
     lock_release (&frame_table_lock);
+    return new_frame;
   } 
-  return page;
+  return NULL;
 }
 
-void
+/*
+  Frees the memory occupied by a frame table entry
+*/
+static void
 free_frame_table_entry (frame_table_entry *frame_table_entry) {
   lock_acquire (&frame_table_lock);
   list_remove (&frame_table_entry->elem);
-  //palloc_free_page (frame_table_entry->page);
   lock_release (&frame_table_lock);
   free (frame_table_entry);
 }
 
 void
-free_frame_table_entry_of_page (void* page) {
+free_frame_table_entry_from_page (void* page) {
   lock_acquire (&frame_table_lock);
   struct list_elem *e;
   for (e = list_begin (&frame_table); e != list_end (&frame_table);) {
     frame_table_entry *f = list_entry (e, frame_table_entry, elem);
     if (f->page == page) {
-      e = list_remove (&f->elem);
-      //palloc_free_page (page);
+      e = list_remove (&f->elem); // can we just lock this section and use free_frame_table_entry?
       free (f);
+      return;
     } else {
       e = list_next (e);
     }
   }
-  lock_release (&frame_table_lock);
+  lock_release (&frame_table_lock);  //do we have to lock the whole thing?
 }
 
 void
 free_frame_table_entries_of_thread (struct thread *t) {
-  lock_acquire (&frame_table_lock);
-  struct list_elem *e;
-  for (e = list_begin (&frame_table); e != list_end (&frame_table);) {
-    frame_table_entry *f = list_entry (e, frame_table_entry, elem);
-    if (f->thread == t) {
-      e = list_remove (&f->elem);
-      //palloc_free_page (f->page);
-      free (f);
-    } else {
-      e = list_next (e);
-    }
+  struct hash supp_table = t->supp_page_table;
+
+  hash_apply (&supp_table, &free_frame_from_supp_pte);
+  // do we need to lock the spt??
+}
+
+void 
+free_frame_from_supp_pte (struct hash_elem *e, void *aux UNUSED) {
+  supp_pte *entry = hash_entry (e, supp_pte, elem);
+
+  frame_table_entry *f = entry->page_frame;
+  if (f != NULL) {
+    frame_table_entry (f);
   }
-  lock_release (&frame_table_lock);
+  entry->page_frame = NULL;
 }
 
 frame_nr

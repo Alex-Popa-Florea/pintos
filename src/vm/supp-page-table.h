@@ -4,6 +4,7 @@
 #include "lib/kernel/hash.h"
 #include "filesys/off_t.h"
 #include "filesys/file.h"
+#include "vm/frame.h"
 
 /* Enum to represent source of page */
 enum source {
@@ -17,16 +18,17 @@ enum source {
   Struct for an entry in a supplemental page table, a hash table
 */
 typedef struct {
-  uint8_t *addr;                 /* Base address of the page (key) */
-  struct file *file;             /* File storing the relevent data for process */
-  off_t ofs;                     /* Offset in the file for current page */ 
-  uint32_t read_bytes;           /* No. of bytes that must be read to initialise page */
-  uint32_t zero_bytes;           /* Bytes to be zeroed in virtual memory */
-  bool writable;                 /* Records if page should be writable or read-only */
-  bool is_dirty;                 /* Records if a page has been modified, and hence needs writing to disk */
-  enum source page_source;             /* Records the source of the page */
-
-  struct hash_elem elem;    /* Hash table elem */
+  uint8_t *addr;                      /* Base address of the page (key) */
+  struct file *file;                  /* File storing the relevent data for process */
+  off_t ofs;                          /* Offset in the file for current page */ 
+  uint32_t read_bytes;                /* No. of bytes that must be read to initialise page */
+  uint32_t zero_bytes;                /* Bytes to be zeroed in virtual memory */
+  bool writable;                      /* Records if page should be writable or read-only */
+  bool is_dirty;                      /* Records if a page has been modified, and hence needs writing to disk */
+  enum source page_source;            /* Records the source of the page */
+  frame_table_entry *page_frame;      /* Pointer to page frame if page is loaded to frame table, null otherwise */
+   
+  struct hash_elem elem;              /* Hash table elem */
 } supp_pte;
 
 

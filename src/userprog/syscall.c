@@ -506,7 +506,7 @@ munmap (mapid_t mapping) {
       uint8_t *kpage = pagedir_get_page (thread_current ()->pagedir, entry->addr);
 	    pagedir_clear_page (thread_current ()->pagedir, entry->addr);
 
-	    free_frame_table_entry_of_page (kpage);
+	    free_frame_table_entry_from_page (kpage);
       palloc_free_page (kpage);
 
       hash_delete (&thread_current ()->supp_page_table, &entry->elem);

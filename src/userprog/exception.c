@@ -223,7 +223,8 @@ bool
 load_page (supp_pte *entry) {
 
   /* Get a new page of memory. */
-  uint8_t *kpage = try_allocate_page (PAL_USER);
+  frame_table_entry *new_frame = try_allocate_page (PAL_USER);
+  uint8_t *kpage = new_frame->page;
 
   if (kpage == NULL) {
     return false;
@@ -231,7 +232,7 @@ load_page (supp_pte *entry) {
 
   /* Add the page to the process's address space. */
   if (!install_page (entry->addr, kpage, entry->writable)) {
-    free_frame_table_entry_of_page (kpage);
+    free_frame_from_supp_pte (&entry->elem, NULL);
     palloc_free_page (kpage);
     return false; 
   }
@@ -243,45 +244,49 @@ load_page (supp_pte *entry) {
   lock_release (&file_system_lock);
 
   if (bytes_read != (off_t) entry->read_bytes) {
-    free_frame_table_entry_of_page (kpage);
+    free_frame_from_supp_pte (&entry->elem, NULL);
     palloc_free_page (kpage);
     return false; 
   }
 
   /* Set the remaining bytes of the page to 0 */
   memset (kpage + entry->read_bytes, 0, entry->zero_bytes);
+  entry->page_frame = new_frame;
   return true;
 }
 
 bool 
 load_stack_page (supp_pte *entry) {
 
-  uint8_t *kpage = try_allocate_page (PAL_USER);
+  frame_table_entry *new_frame = try_allocate_page (PAL_USER);
+  uint8_t *kpage = new_frame->page;
 
   if (!kpage) {
     return false;
   }
   
   if (!install_page (entry->addr, kpage, entry->writable)) {
-    free_frame_table_entry_of_page (kpage);
+    free_frame_from_supp_pte (&entry->elem, NULL);
     palloc_free_page (kpage);
     return false;
   }
 
+  entry->page_frame = new_frame;
   return true;
 }
 
 bool
 load_mmap_page (supp_pte *entry) {
 
-  uint8_t *kpage = try_allocate_page (PAL_USER);
+  frame_table_entry *new_frame = try_allocate_page (PAL_USER);
+  uint8_t *kpage = new_frame->page;
   if (kpage == NULL) {
     return false;
   }
 
   /* Add the page to the process's address space. */
   if (!install_page (entry->addr, kpage, entry->writable)) {
-    free_frame_table_entry_of_page (kpage);
+    free_frame_from_supp_pte (&entry->elem, NULL);
     palloc_free_page (kpage);
     return false; 
   }
@@ -293,11 +298,13 @@ load_mmap_page (supp_pte *entry) {
   lock_release (&file_system_lock);
 
   if (bytes_read != (off_t) entry->read_bytes) {
-    free_frame_table_entry_of_page (kpage);
+    free_frame_from_supp_pte (&entry->elem, NULL);
     palloc_free_page (kpage);
     return false; 
   }
 
   /* Set the remaining bytes of the page to 0 */
   memset (kpage + entry->read_bytes, 0, entry->zero_bytes);
+  entry->page_frame = new_frame;
+  return true;
 }
