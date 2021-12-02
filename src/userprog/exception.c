@@ -197,7 +197,7 @@ page_fault (struct intr_frame *f)
       }
   } 
 
-  if ((PHYS_BASE - pg_round_down (fault_addr)) <= (8000000) && (uint32_t*) fault_addr >= (f->esp - 32) && is_user_vaddr(fault_addr)) {
+  if ((PHYS_BASE - pg_round_down (fault_addr)) <= (1 << 23) && (uint32_t*) fault_addr >= (f->esp - 32) && is_user_vaddr(fault_addr)) {
     struct hash_elem *entry_elem = setup_pte_for_stack (fault_addr);
     supp_pte *entry = hash_entry (entry_elem, supp_pte, elem);
     load_success = load_stack_page (entry);
@@ -274,7 +274,7 @@ load_stack_page (supp_pte *entry) {
 bool
 load_mmap_page (supp_pte *entry) {
 
-  uint8_t *kpage = try_allocate_page (PAL_USER | PAL_ZERO);
+  uint8_t *kpage = try_allocate_page (PAL_USER);
   if (kpage == NULL) {
     return false;
   }

@@ -23,6 +23,7 @@
 #include "threads/malloc.h"
 #include "devices/timer.h"
 #include "vm/frame.h"
+#include "userprog/exception.h"
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
@@ -319,6 +320,8 @@ process_exit (void)
     free (current_file);
   }
 
+  lock_release (&file_system_lock);
+
   struct list *mapped_list = &cur->mmapped_file_list;
 
   while (!list_empty (mapped_list)) {
@@ -326,8 +329,6 @@ process_exit (void)
     mapped_file *current_file = list_entry (e, mapped_file, mapped_elem);
     munmap (current_file->mapping);
   }
-
-  lock_release (&file_system_lock);
 
   free_frame_table_entries_of_thread (cur);
 

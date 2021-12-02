@@ -16,6 +16,7 @@
 #include "threads/synch.h"
 #include "threads/malloc.h"
 #include "lib/user/syscall.h"
+#include "vm/frame.h"
 
 /* List of all pcbs as defined in process.c */
 //extern struct list pcb_list;
@@ -415,6 +416,7 @@ mmap (int fd, void *addr) {
     lock_release (&file_system_lock);
     return MAP_FAILED;
   }
+
   struct file *reopened_file = file_reopen (process_file->file);
   int length = file_length (reopened_file);
   if (length <= 0) {
@@ -422,11 +424,17 @@ mmap (int fd, void *addr) {
     return MAP_FAILED;
   }
 
-  int page_count = length / PGSIZE;
-
+  int page_count = length / PGSIZE + 1;
   for (int i = 0; i < page_count; i++) {
     void *page = addr + PGSIZE * i;
-    
+    struct hash *supp_page_table = &thread_current ()->supp_page_table;
+    supp_pte old_entry_query;
+    old_entry_query.addr = page;
+    struct hash_elem *old_entry_elem = hash_find (supp_page_table, &old_entry_query.elem);
+    if (old_entry_elem != NULL) {
+      lock_release (&file_system_lock);
+      return MAP_FAILED;
+    }
   }
 
   mapid_t id = thread_current ()->current_mmapped_id;
@@ -472,7 +480,7 @@ munmap_wrapper (int *addr) {
 void 
 munmap (mapid_t mapping) {
   
-  if (mapping <= 0) {
+  if (mapping < 0) {
     return;
   }
 
@@ -482,6 +490,8 @@ munmap (mapid_t mapping) {
     return;
   }
 
+  lock_acquire (&file_system_lock);
+
   struct list_elem *e;
   for (e = list_begin (mapped_list); e != list_end (mapped_list);) {
     mapped_file *current_mapped_file = list_entry (e, mapped_file, mapped_elem);
@@ -490,8 +500,14 @@ munmap (mapid_t mapping) {
       file_seek (entry->file, 0);
 
       if (pagedir_is_dirty (thread_current ()->pagedir, entry->addr)) {
-        uint32_t bytes_written = file_write_at (entry->file, entry->addr, entry->read_bytes, entry->ofs);
+        file_write_at (entry->file, entry->addr, entry->read_bytes, entry->ofs);
       }
+
+      uint8_t *kpage = pagedir_get_page (thread_current ()->pagedir, entry->addr);
+	    pagedir_clear_page (thread_current ()->pagedir, entry->addr);
+
+	    free_frame_table_entry_of_page (kpage);
+      palloc_free_page (kpage);
 
       hash_delete (&thread_current ()->supp_page_table, &entry->elem);
       free (entry);
@@ -502,6 +518,7 @@ munmap (mapid_t mapping) {
       e = list_next (e);
     }
   }
+  lock_release (&file_system_lock);
 }
 
 
