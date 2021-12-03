@@ -28,7 +28,7 @@ struct hash *swap_table;
   Struct for an entry in swap table
 */
 typedef struct {
-	void *page;                 	 /* Start address of page address space (key) */
+	void *page;                    /* Start address of page address space (key) */
 	size_t index;                  /* Index of first block sector in device */
 
   struct hash_elem elem;         /* Hash table elem */

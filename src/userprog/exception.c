@@ -14,6 +14,7 @@
 #include "userprog/process.h"
 #include "vm/frame.h"
 #include "vm/swap.h"
+#include "vm/share-table.h"
 #include "string.h"
 
 /* Number of page faults processed. */
@@ -188,6 +189,21 @@ page_fault (struct intr_frame *f)
           break;
 
         case DISK:
+          /* Only non-writable pages can be shared */
+          if (!entry->writable) {
+            share_entry search_entry;
+            search_entry.key = share_key (entry);
+            struct hash_elem *search_elem = hash_find (&share_table, &search_entry.elem);
+
+            if (search_elem != NULL) {
+              /* Entry already exists in the share table */
+              share_entry *found_entry = hash_entry (search_elem, share_entry, elem);
+              if (found_entry->page != NULL) {
+                install_page (entry->addr, found_entry->page, entry->writable);
+              }
+            }
+
+          }
           load_success = load_page (entry);
           break;
 

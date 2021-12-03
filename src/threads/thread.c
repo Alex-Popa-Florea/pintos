@@ -15,6 +15,7 @@
 #include "threads/vaddr.h"
 #include "devices/timer.h"
 #include "vm/frame.h"
+#include "vm/share-table.h"
 
 #ifdef USERPROG
 #include "userprog/process.h"
@@ -121,6 +122,7 @@ thread_init (void)
   #endif
 
   init_frame_table ();
+  init_share_table ();
 
   /* Set up a thread structure for the running thread. */
   init_thread (initial_thread, "main", PRI_DEFAULT);
