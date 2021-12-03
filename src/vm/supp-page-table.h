@@ -8,10 +8,10 @@
 
 /* Enum to represent source of page */
 enum source {
-  MMAP,                          /* Loading from a memory mapped filed */   
-  STACK,                         /* Stack Page */  
-  SWAP_SPACE,                          /* Page stored on swap space */
-  DISK                           /* Stored on file system */
+  MMAP,                          /* Memory mapped file */   
+  STACK,                         /* Stack page */  
+  SWAP_SPACE,                    /* Swap space */
+  DISK                           /* File system */
 };
 
 /*
@@ -45,9 +45,10 @@ bool supp_hash_compare (const struct hash_elem *, const struct hash_elem *,void 
 
 
 /* 
-  Used within hash_destroy to free elements of a supp_page_table
+  Used within hash_destroy to free elements of a supp_page_table, taking in
+  an auxiliary parameter
 */
-void destroy_elem (struct hash_elem *e, void *aux);
+void destroy_elem (struct hash_elem *e, void *);
 
 supp_pte *create_supp_pte (struct file *, off_t, uint8_t *,
                            uint32_t, uint32_t, bool, enum source);

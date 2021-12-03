@@ -1,7 +1,9 @@
 #include "share-table.h"
 #include "threads/malloc.h"
 #include "threads/synch.h"
+#include "threads/thread.h"
 #include "vm/supp-page-table.h"
+#include "filesys/file.h"
 
 
 int
@@ -9,6 +11,13 @@ share_key (supp_pte *pte) {
   int k1 = (int) pte->file->inode;
   int k2 = pte->ofs;
   return 0.5 * (k1 + k2) * (k1 + k2 + 1) + k2;
+}
+
+
+sharing_thread *create_sharing_thread (struct thread *t) {
+  sharing_thread *share = (sharing_thread *) malloc (sizeof (sharing_thread));
+  share->thread = t;
+  return share;
 }
 
 
@@ -23,6 +32,9 @@ create_share_entry (supp_pte *pte) {
     entry->inode = pte->file->inode;
     entry->ofs = pte->ofs;
     entry->page = NULL;
+    list_init (&entry->sharing_threads);
+    sharing_thread *share = create_sharing_thread (thread_current ());
+    list_push_back (&entry->sharing_threads, &share->elem);
     return entry;
 }
 
@@ -35,7 +47,7 @@ void set_share_entry_page (share_entry *entry, void *page) {
 
 void 
 init_share_table (void) {
-  list_init (&share_table);
+  hash_init (&share_table);
   lock_init (&share_table_lock);
 }
 

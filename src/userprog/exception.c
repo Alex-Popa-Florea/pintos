@@ -23,7 +23,7 @@ static long long page_fault_cnt;
 static void kill (struct intr_frame *);
 static void page_fault (struct intr_frame *);
 static void print_page_fault (void *, bool, bool, bool);
-static bool load_page (supp_pte *);
+static void *load_page (supp_pte *);
 static bool load_mmap_page (supp_pte *);
 
 /* Registers handlers for interrupts that can be caused by user
@@ -195,8 +195,6 @@ page_fault (struct intr_frame *f)
           if (!entry->writable) {
             share_entry search_entry;
             search_entry.key = share_key (entry);
-
-
             struct hash_elem *search_elem = hash_find (&share_table, &search_entry.elem);
 
             if (search_elem != NULL) {
@@ -206,11 +204,22 @@ page_fault (struct intr_frame *f)
               if (found_entry->page != NULL) {
                 /* Page has already been allocated so it is shared */
                 install_page (entry->addr, found_entry->page, entry->writable);
+                load_success = true;
                 break;
               }
             }
           }
-          load_success = load_page (entry);
+
+          /* Allocate a frame */
+          void *allocated_page = load_page (entry);
+          load_success = allocated_page == NULL ? false : true;
+
+          /* Add the new frame to the share table */
+          if (load_success) {
+            share_entry *new_share_entry = create_share_entry (entry);
+            set_share_entry_page (new_share_entry, allocated_page);
+            hash_insert (&share_table, &new_share_entry->elem);
+          }
           break;
 
         default:
@@ -284,8 +293,9 @@ load_stack_page (supp_pte *entry) {
 /*
   Loads a page from a supplemental page table entry into an active page, 
   using the frame table
+  Returns the pointer to the active page, NULL if not 
 */
-static bool
+static void *
 load_page (supp_pte *entry) {
 
   /* Get a new page of memory. */
@@ -293,14 +303,14 @@ load_page (supp_pte *entry) {
   uint8_t *kpage = new_frame->page;
 
   if (kpage == NULL) {
-    return false;
+    return NULL;
   }
 
   /* Add the page to the process's address space. */
   if (!install_page (entry->addr, kpage, entry->writable)) {
     free_frame_from_supp_pte (&entry->elem, NULL);
     palloc_free_page (kpage);
-    return false; 
+    return NULL;
   }
   
   /* Load data into the page from the file system */
@@ -312,13 +322,13 @@ load_page (supp_pte *entry) {
   if (bytes_read != (off_t) entry->read_bytes) {
     free_frame_from_supp_pte (&entry->elem, NULL);
     palloc_free_page (kpage);
-    return false; 
+    return NULL;
   }
 
   /* Set the remaining bytes of the page to 0 */
   memset (kpage + entry->read_bytes, 0, entry->zero_bytes);
   entry->page_frame = new_frame;
-  return true;
+  return kpage;
 }
 
 
