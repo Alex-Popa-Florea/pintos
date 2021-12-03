@@ -267,6 +267,11 @@ pcb
   return NULL;
 }
 
+void 
+set_exit_status (pcb *p, int status) {
+  p->exit_status = status;
+}
+
 int
 process_wait (tid_t child_tid) 
 {
@@ -585,7 +590,6 @@ load (const char *file_name, void (**eip) (void), void **esp)
 
 /* load() helpers. */
 
-//static bool install_page (void *upage, void *kpage, bool writable);
 
 /* Checks whether PHDR describes a valid, loadable segment in
    FILE and returns true if so, false otherwise. */
@@ -707,6 +711,7 @@ set_up_pte_for_stack (void *upage) {
   return &entry->elem;
 }
 
+
 /* Create a minimal stack by mapping a zeroed page at the top of
    user virtual memory. */
 static bool
@@ -744,8 +749,5 @@ install_page (void *upage, void *kpage, bool writable)
           && pagedir_set_page (t->pagedir, upage, kpage, writable));
 }
 
-void 
-set_exit_status (pcb *p, int status) {
-  p->exit_status = status;
-}
+
 

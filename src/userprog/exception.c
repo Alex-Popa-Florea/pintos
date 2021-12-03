@@ -22,7 +22,9 @@ static long long page_fault_cnt;
 
 static void kill (struct intr_frame *);
 static void page_fault (struct intr_frame *);
-static void print_page_fault (void *fault_addr, bool not_present, bool write, bool user);
+static void print_page_fault (void *, bool, bool, bool);
+static bool load_page (supp_pte *);
+static bool load_mmap_page (supp_pte *);
 
 /* Registers handlers for interrupts that can be caused by user
    programs.
@@ -256,41 +258,7 @@ print_page_fault (void *fault_addr, bool not_present, bool write, bool user)
 }
 
 
-bool
-load_page (supp_pte *entry) {
 
-  /* Get a new page of memory. */
-  frame_table_entry *new_frame = try_allocate_page (PAL_USER);
-  uint8_t *kpage = new_frame->page;
-
-  if (kpage == NULL) {
-    return false;
-  }
-
-  /* Add the page to the process's address space. */
-  if (!install_page (entry->addr, kpage, entry->writable)) {
-    free_frame_from_supp_pte (&entry->elem, NULL);
-    palloc_free_page (kpage);
-    return false; 
-  }
-  
-  lock_acquire (&file_system_lock);
-  file_seek (entry->file, entry->ofs);
-  /* Load data into the page. */
-  off_t bytes_read = file_read (entry->file, kpage, entry->read_bytes);
-  lock_release (&file_system_lock);
-
-  if (bytes_read != (off_t) entry->read_bytes) {
-    free_frame_from_supp_pte (&entry->elem, NULL);
-    palloc_free_page (kpage);
-    return false; 
-  }
-
-  /* Set the remaining bytes of the page to 0 */
-  memset (kpage + entry->read_bytes, 0, entry->zero_bytes);
-  entry->page_frame = new_frame;
-  return true;
-}
 
 bool 
 load_stack_page (supp_pte *entry) {
@@ -313,7 +281,54 @@ load_stack_page (supp_pte *entry) {
 }
 
 
-bool
+/*
+  Loads a page from a supplemental page table entry into an active page, 
+  using the frame table
+*/
+static bool
+load_page (supp_pte *entry) {
+
+  /* Get a new page of memory. */
+  frame_table_entry *new_frame = try_allocate_page (PAL_USER);
+  uint8_t *kpage = new_frame->page;
+
+  if (kpage == NULL) {
+    return false;
+  }
+
+  /* Add the page to the process's address space. */
+  if (!install_page (entry->addr, kpage, entry->writable)) {
+    free_frame_from_supp_pte (&entry->elem, NULL);
+    palloc_free_page (kpage);
+    return false; 
+  }
+  
+  /* Load data into the page from the file system */
+  lock_acquire (&file_system_lock);
+  file_seek (entry->file, entry->ofs);
+  off_t bytes_read = file_read (entry->file, kpage, entry->read_bytes);
+  lock_release (&file_system_lock);
+
+  if (bytes_read != (off_t) entry->read_bytes) {
+    free_frame_from_supp_pte (&entry->elem, NULL);
+    palloc_free_page (kpage);
+    return false; 
+  }
+
+  /* Set the remaining bytes of the page to 0 */
+  memset (kpage + entry->read_bytes, 0, entry->zero_bytes);
+  entry->page_frame = new_frame;
+  return true;
+}
+
+
+
+
+/*
+  Loads a memory mapped file page from a supplemental page table entry
+  into an active page
+*/
+static bool
 load_mmap_page (supp_pte *entry) {
 
   frame_table_entry *new_frame = try_allocate_page (PAL_USER);

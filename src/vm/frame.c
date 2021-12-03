@@ -52,23 +52,22 @@ free_frame_table_entry_from_page (void* page) {
   for (e = list_begin (&frame_table); e != list_end (&frame_table);) {
     frame_table_entry *f = list_entry (e, frame_table_entry, elem);
     if (f->page == page) {
-      e = list_remove (&f->elem); // can we just lock this section and use free_frame_table_entry?
+      e = list_remove (&f->elem);
       free (f);
       return;
     } else {
       e = list_next (e);
     }
   }
-  lock_release (&frame_table_lock);  //do we have to lock the whole thing?
+  lock_release (&frame_table_lock);
 }
 
 void
 free_frame_table_entries_of_thread (struct thread *t) {
   struct hash supp_table = t->supp_page_table;
-
   hash_apply (&supp_table, &free_frame_from_supp_pte);
-  // do we need to lock the spt??
 }
+
 
 void 
 free_frame_from_supp_pte (struct hash_elem *e, void *aux UNUSED) {
@@ -80,6 +79,7 @@ free_frame_from_supp_pte (struct hash_elem *e, void *aux UNUSED) {
   }
   entry->page_frame = NULL;
 }
+
 
 frame_nr
 get_frame_nr (frame_table_entry *frame_entry) {

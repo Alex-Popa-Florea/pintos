@@ -13,18 +13,9 @@ void exception_init (void);
 void exception_print_stats (void);
 
 /*
-  Loads a page from a supplemental page table entry into an active page
-*/
-bool load_page (supp_pte *entry);
-
-/*
   Loads a stack page from a supplemental page table entry into an active page
 */
-bool load_stack_page (supp_pte *entry);
+bool load_stack_page (supp_pte *);
 
-/*
-  Loads a memory mapped file page from a supplemental page table entry into an active page
-*/
-bool load_mmap_page (supp_pte *entry);
 
 #endif /* userprog/exception.h */
