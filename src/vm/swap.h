@@ -9,6 +9,7 @@
 #include "threads/vaddr.h"
 #include "devices/block.h"
 
+
 /* Calculates number of sectors in BLOCK_SWAP */
 #define NUM_SWAP_BLOCK_SECTORS (block_size (block_get_role (BLOCK_SWAP)) / BLOCK_SECTOR_SIZE)
 

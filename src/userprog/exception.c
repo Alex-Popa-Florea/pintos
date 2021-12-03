@@ -223,7 +223,7 @@ bool
 load_page (supp_pte *entry) {
 
   /* Get a new page of memory. */
-  frame_table_entry *new_frame = try_allocate_page (PAL_USER);
+  frame_table_entry *new_frame = try_allocate_page (PAL_USER,entry);
   uint8_t *kpage = new_frame->page;
 
   if (kpage == NULL) {
@@ -258,7 +258,7 @@ load_page (supp_pte *entry) {
 bool 
 load_stack_page (supp_pte *entry) {
 
-  frame_table_entry *new_frame = try_allocate_page (PAL_USER);
+  frame_table_entry *new_frame = try_allocate_page (PAL_USER,entry);
   uint8_t *kpage = new_frame->page;
 
   if (!kpage) {
@@ -278,7 +278,7 @@ load_stack_page (supp_pte *entry) {
 bool
 load_mmap_page (supp_pte *entry) {
 
-  frame_table_entry *new_frame = try_allocate_page (PAL_USER);
+  frame_table_entry *new_frame = try_allocate_page (PAL_USER,entry);
   uint8_t *kpage = new_frame->page;
   if (kpage == NULL) {
     return false;

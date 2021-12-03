@@ -5,6 +5,8 @@
 #include "lib/kernel/list.h"
 #include "threads/thread.h"
 #include "threads/synch.h"
+#include "vm/swap.h"
+
 
 /*
   Type for the number which identifies an allocated page
@@ -18,6 +20,7 @@ typedef int frame_nr;
 typedef struct {
   void *page;                
   struct list_elem elem;
+  bool r_bit;
 } frame_table_entry;
 
 
@@ -43,7 +46,7 @@ void init_frame_table (void);
   Tries to allocate a page of memory using the flags provided
   Returns the pointer to page frame if successful, otherwise NULL
 */
-frame_table_entry *try_allocate_page (enum palloc_flags);
+frame_table_entry *try_allocate_page (enum palloc_flags,supp_pte *);
 
 
 /* Frees the given page and its corresponding frame table entry */
