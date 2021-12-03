@@ -36,7 +36,7 @@ typedef struct {
   of struct inode * and ofs to integers, for a unique key in the share table
     These are stored in a supplemental page table entry 
 */
-int share_key (supp_pte *pte);
+int share_key (supp_pte *);
 
 
 /*
@@ -44,7 +44,13 @@ int share_key (supp_pte *pte);
   Calculates the key from the file's inode and offset
   Returns the pointer if memory allocation is successful, otherwise NULL
 */
-share_entry *create_share_entry (supp_pte *entry);
+share_entry *create_share_entry (supp_pte *);
+
+
+/*
+  Sets the page member of a share table entry
+*/
+void set_share_entry_page (share_entry *, void *);
 
 
 /*
@@ -54,19 +60,19 @@ void init_share_table (void);
 
 
 /* 
-  Hash function for Share Table
+  Hash function for share table
 */
 unsigned share_hash (const struct hash_elem *, void *);
 
 
 /* 
-  Comparison function for Share Table using the keys for table entries
+  Comparison function for sharet able using the keys for table entries
 */
 bool share_hash_compare (const struct hash_elem *, const struct hash_elem *, void *);
 
 
 /* 
-  Used within hash_destroy to free elements of the Share Table
+  Used within hash_destroy to free elements of the share table
 */
 void destroy_elem (struct hash_elem *e, void *aux);
 

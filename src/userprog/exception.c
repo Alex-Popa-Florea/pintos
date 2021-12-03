@@ -163,7 +163,7 @@ page_fault (struct intr_frame *f)
    loads the page from the current thread's supplemental page table
   */
   bool load_success = false;
-  if (not_present && is_user_vaddr(fault_addr)) {
+  if (not_present && is_user_vaddr (fault_addr)) {
       struct thread *t = thread_current ();
       supp_pte fault_entry;
       fault_entry.addr = pg_round_down (fault_addr);
@@ -193,16 +193,20 @@ page_fault (struct intr_frame *f)
           if (!entry->writable) {
             share_entry search_entry;
             search_entry.key = share_key (entry);
+
+
             struct hash_elem *search_elem = hash_find (&share_table, &search_entry.elem);
 
             if (search_elem != NULL) {
               /* Entry already exists in the share table */
               share_entry *found_entry = hash_entry (search_elem, share_entry, elem);
+              
               if (found_entry->page != NULL) {
+                /* Page has already been allocated so it is shared */
                 install_page (entry->addr, found_entry->page, entry->writable);
+                break;
               }
             }
-
           }
           load_success = load_page (entry);
           break;
@@ -213,8 +217,24 @@ page_fault (struct intr_frame *f)
       }
   } 
 
-  if ((PHYS_BASE - pg_round_down (fault_addr)) <= (1 << 23) && (uint32_t*) fault_addr >= (f->esp - 32) && is_user_vaddr(fault_addr)) {
-    struct hash_elem *entry_elem = setup_pte_for_stack (fault_addr);
+
+  /* Even if there is no entry in the supplemental page table, stack growth
+     is possible 
+  */
+
+  /* Checks the fault address is not outside the stack's allowed 8 MB */
+  bool not_overflow = PHYS_BASE - pg_round_down (fault_addr) <= (1 << 23);
+
+  /* Checks the fault address is above the stack pointer, equal to the stack
+     pointer - 32 or equal to the stack pointer - 4
+  */ 
+  bool valid_fault_address = (uint32_t*) fault_addr >= f->esp
+                              || (uint32_t*) fault_addr == f->esp - 32
+                              || (uint32_t*) fault_addr == f->esp - 4;
+
+
+  if (not_overflow && valid_fault_address && is_user_vaddr (fault_addr)) {
+    struct hash_elem *entry_elem = set_up_pte_for_stack (fault_addr);
     supp_pte *entry = hash_entry (entry_elem, supp_pte, elem);
     load_success = load_stack_page (entry);
   }
@@ -234,6 +254,7 @@ print_page_fault (void *fault_addr, bool not_present, bool write, bool user)
               write ? "writing" : "reading",
               user ? "user" : "kernel");
 }
+
 
 bool
 load_page (supp_pte *entry) {
@@ -290,6 +311,7 @@ load_stack_page (supp_pte *entry) {
   entry->page_frame = new_frame;
   return true;
 }
+
 
 bool
 load_mmap_page (supp_pte *entry) {

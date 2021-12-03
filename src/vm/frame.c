@@ -76,7 +76,7 @@ free_frame_from_supp_pte (struct hash_elem *e, void *aux UNUSED) {
 
   frame_table_entry *f = entry->page_frame;
   if (f != NULL) {
-    frame_table_entry (f);
+    free_frame_table_entry (f);
   }
   entry->page_frame = NULL;
 }

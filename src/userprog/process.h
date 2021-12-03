@@ -64,11 +64,13 @@ void init_pcb (pcb *, int, int);
 */
 bool process_has_child (pcb *parent, pid_t child_id);
 
+
 /*
   Returns a pointer to the pcb corresponding to an id, NULL if there is no match
   Assumes interrupts are disabled so access is thread-safe
 */
 pcb *get_pcb_from_id (tid_t);
+
 
 /*
   Set the exit status of a pcb to the exit status provided
@@ -76,14 +78,23 @@ pcb *get_pcb_from_id (tid_t);
 void set_exit_status (pcb *, int);
 
 
+/* Adds a mapping from user virtual address UPAGE to kernel
+   virtual address KPAGE to the page table.
+   If WRITABLE is true, the user process may modify the page;
+   otherwise, it is read-only.
+   UPAGE must not already be mapped.
+   KPAGE should probably be a page obtained from the user pool
+   with palloc_get_page().
+   Returns true on success, false if UPAGE is already mapped or
+   if memory allocation fails.
+*/
 bool install_page (void *upage, void *kpage, bool writable);
 
-/* Create a supplemental page table entry for a stack page */
-struct hash_elem *setup_pte_for_stack (void *upage);
 
 /*
-  Loads a page from a supplemental page table entry into an active page
+  Create a supplemental page table entry for a stack page
 */
-bool load_page (supp_pte *);
+struct hash_elem *set_up_pte_for_stack (void *upage);
+
 
 #endif /* userprog/process.h */

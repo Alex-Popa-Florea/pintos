@@ -330,6 +330,9 @@ process_exit (void)
     munmap (current_file->mapping);
   }
 
+  /*
+    Deallocates the frame table entries corresponding to the thread
+  */
   free_frame_table_entries_of_thread (cur);
 
   hash_destroy (&cur->supp_page_table, &destroy_elem);
@@ -692,7 +695,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 
 
 struct hash_elem *
-setup_pte_for_stack (void *upage) {
+set_up_pte_for_stack (void *upage) {
   supp_pte *entry = (supp_pte *) malloc (sizeof (supp_pte));
   if (!entry) {
     return NULL;
@@ -709,7 +712,7 @@ setup_pte_for_stack (void *upage) {
 static bool
 setup_stack (void **esp) 
 {
-  struct hash_elem *entry_elem = setup_pte_for_stack (((uint8_t *) PHYS_BASE) - PGSIZE);
+  struct hash_elem *entry_elem = set_up_pte_for_stack (((uint8_t *) PHYS_BASE) - PGSIZE);
   
   if (!entry_elem) {
     return false;
@@ -729,15 +732,7 @@ setup_stack (void **esp)
   return true;
 }
 
-/* Adds a mapping from user virtual address UPAGE to kernel
-   virtual address KPAGE to the page table.
-   If WRITABLE is true, the user process may modify the page;
-   otherwise, it is read-only.
-   UPAGE must not already be mapped.
-   KPAGE should probably be a page obtained from the user pool
-   with palloc_get_page().
-   Returns true on success, false if UPAGE is already mapped or
-   if memory allocation fails. */
+
 bool
 install_page (void *upage, void *kpage, bool writable)
 {

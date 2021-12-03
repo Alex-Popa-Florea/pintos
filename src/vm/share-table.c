@@ -19,11 +19,17 @@ create_share_entry (supp_pte *pte) {
       return NULL;
     }
 
-    entry->key = calculate_key (pte->file, pte->ofs);
+    entry->key = share_key (pte);
     entry->inode = pte->file->inode;
     entry->ofs = pte->ofs;
     entry->page = NULL;
     return entry;
+}
+
+
+
+void set_share_entry_page (share_entry *entry, void *page) {
+  entry->page = page;
 }
 
 
