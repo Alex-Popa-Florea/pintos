@@ -5,6 +5,7 @@
 #include "lib/kernel/list.h"
 #include "threads/thread.h"
 #include "threads/synch.h"
+#include "debug.h"
 
 /*
   Type for the number which identifies an allocated page
@@ -44,10 +45,6 @@ void init_frame_table (void);
   Returns the pointer to page frame if successful, otherwise NULL
 */
 frame_table_entry *try_allocate_page (enum palloc_flags);
-
-
-/* Frees the given page and its corresponding frame table entry */
-void free_frame_table_entry_from_page (void* page);
 
 
 /*

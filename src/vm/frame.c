@@ -1,6 +1,5 @@
 #include "vm/frame.h"
 
-#include "debug.h"
 #include "threads/malloc.h"
 #include "threads/palloc.h"
 #include "lib/kernel/list.h"
@@ -46,28 +45,10 @@ free_frame_table_entry (frame_table_entry *frame_table_entry) {
 }
 
 void
-free_frame_table_entry_from_page (void* page) {
-  lock_acquire (&frame_table_lock);
-  struct list_elem *e;
-  for (e = list_begin (&frame_table); e != list_end (&frame_table);) {
-    frame_table_entry *f = list_entry (e, frame_table_entry, elem);
-    if (f->page == page) {
-      e = list_remove (&f->elem); // can we just lock this section and use free_frame_table_entry?
-      free (f);
-      return;
-    } else {
-      e = list_next (e);
-    }
-  }
-  lock_release (&frame_table_lock);  //do we have to lock the whole thing?
-}
-
-void
 free_frame_table_entries_of_thread (struct thread *t) {
   struct hash supp_table = t->supp_page_table;
 
   hash_apply (&supp_table, &free_frame_from_supp_pte);
-  // do we need to lock the spt??
 }
 
 void 
@@ -76,7 +57,7 @@ free_frame_from_supp_pte (struct hash_elem *e, void *aux UNUSED) {
 
   frame_table_entry *f = entry->page_frame;
   if (f != NULL) {
-    frame_table_entry (f);
+    free_frame_table_entry (f);
   }
   entry->page_frame = NULL;
 }
