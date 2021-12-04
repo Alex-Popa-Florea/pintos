@@ -28,13 +28,13 @@ typedef struct {
 /*
   Global list to track the pages which are occupied
 */
-struct list frame_table;
+extern struct list frame_table;
 
 
 /*
   Lock to ensure synchronized access to the frame table
 */
-struct lock frame_table_lock;
+extern struct lock frame_table_lock;
 
 
 /*

@@ -7,15 +7,16 @@
 #include "vm/supp-page-table.h"
 
 
+
 /*
   Share hash table
 */
-struct hash share_table;
+extern struct hash share_table;
 
 /*
   Lock to ensure synchronized access to the Share Table
 */
-struct lock share_table_lock;
+extern struct lock share_table_lock;
 
 
 

@@ -6,6 +6,9 @@
 #include "filesys/file.h"
 
 
+struct hash share_table;
+
+struct lock share_table_lock;
 
 int
 share_key (supp_pte *pte) {
@@ -53,7 +56,6 @@ init_share_table (void) {
   hash_init (&share_table, &share_hash, &share_hash_compare, NULL);
   lock_init (&share_table_lock);
 }
-
 
 
 

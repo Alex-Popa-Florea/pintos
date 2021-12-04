@@ -327,20 +327,18 @@ process_exit (void)
 
   lock_release (&file_system_lock);
 
+  /* Unmap all files that the process has mapped */
   struct list *mapped_list = &cur->mmapped_file_list;
-
   while (!list_empty (mapped_list)) {
     e = list_pop_front (mapped_list);
     mapped_file *current_file = list_entry (e, mapped_file, mapped_elem);
     munmap (current_file->mapping);
   }
 
-  /*
-    Deallocates the frame table entries corresponding to the thread
-  */
+  /* Deallocates the frame table entries corresponding to the thread */
   free_frame_table_entries_of_thread (cur);
 
-  hash_destroy (&cur->supp_page_table, &destroy_elem);
+  hash_destroy (&cur->supp_page_table, &supp_destroy);
 
   /* When a process exits, free all its child processes which have terminated */
   for (e = list_begin (&pcb_list); e != list_end (&pcb_list);) {

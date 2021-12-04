@@ -126,7 +126,8 @@ main (void)
   locate_block_devices ();
   filesys_init (format_filesys);
 #endif
-
+  init_frame_table ();
+  init_share_table ();
   printf ("Boot complete.\n");
   
   /* Run actions specified on kernel command line. */

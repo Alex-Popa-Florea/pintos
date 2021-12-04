@@ -11,6 +11,9 @@
 
 struct list frame_table;
 
+struct lock frame_table_lock;
+
+
 static void free_frame_table_entry (frame_table_entry *);
 
 void 

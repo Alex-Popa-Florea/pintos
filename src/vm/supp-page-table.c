@@ -18,7 +18,7 @@ supp_hash_compare (const struct hash_elem *a, const struct hash_elem *b, void *a
 }
 
 void 
-destroy_elem (struct hash_elem *e, void *aux UNUSED) {
+supp_destroy (struct hash_elem *e, void *aux UNUSED) {
   supp_pte *entry = hash_entry (e, supp_pte, elem);
   free (entry);
 }
