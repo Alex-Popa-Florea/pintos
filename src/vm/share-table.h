@@ -3,8 +3,7 @@
 
 #include "lib/kernel/hash.h"
 #include "filesys/off_t.h"
-#include "filesys/file.h"
-#include "vm/frame.h"
+#include "filesys/inode.h"
 #include "vm/supp-page-table.h"
 
 
@@ -27,7 +26,7 @@ typedef struct {
   int key;                      /* Key for hash table */
   struct inode *inode;          /* File's inode, used to uniquely identify a file */
   off_t ofs;                    /* Offset in the file for current page */ 
-  frame_table_entry *frame;     /* Pointer to page if frame, NULL otherwise */
+  void *page;                   /* Pointer to page storing its data if allocated, NULL otherwise */
   struct list sharing_threads;  /* List of all the threads sharing a frame */
   struct hash_elem elem;        /* Hash table elem */
 } share_entry;
@@ -61,13 +60,13 @@ sharing_thread *create_sharing_thread (struct thread *);
   Calculates the key from the file's inode and offset
   Returns the pointer if memory allocation is successful, otherwise NULL
 */
-share_entry *create_share_entry (supp_pte *, frame_table_entry *);
+share_entry *create_share_entry (supp_pte *, void *);
 
 
 /*
-  Sets the frame member of a Share Table entry
+  Sets the page of a share entry
 */
-void set_share_entry_frame (share_entry *, frame_table_entry *);
+void set_share_entry_page (share_entry *, void *);
 
 
 /*
@@ -92,6 +91,6 @@ bool share_hash_compare (const struct hash_elem *, const struct hash_elem *, voi
   Used within hash_destroy to free elements of the Share Table
   Empties the list of sharing threads
 */
-void destroy_elem (struct hash_elem *, void *);
+void share_destroy (struct hash_elem *, void *);
 
 #endif

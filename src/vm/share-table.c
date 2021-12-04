@@ -6,15 +6,18 @@
 #include "filesys/file.h"
 
 
+
 int
 share_key (supp_pte *pte) {
-  int k1 = (int) pte->file->inode;
+  struct inode *inode = file_get_inode (pte->file);
+  int k1 = inode;
   int k2 = pte->ofs;
-  return 0.5 * (k1 + k2) * (k1 + k2 + 1) + k2;
+  return ((k1 + k2) * (k1 + k2 + 1) + k2) / 2;
 }
 
 
-sharing_thread *create_sharing_thread (struct thread *t) {
+sharing_thread *
+create_sharing_thread (struct thread *t) {
   sharing_thread *share = (sharing_thread *) malloc (sizeof (sharing_thread));
   share->thread = t;
   return share;
@@ -22,16 +25,16 @@ sharing_thread *create_sharing_thread (struct thread *t) {
 
 
 share_entry *
-create_share_entry (supp_pte *pte, frame_table_entry *frame) {
+create_share_entry (supp_pte *pte, void *page) {
     share_entry *entry = (share_entry *) malloc (sizeof (share_entry));
     if (entry == NULL) {
       return NULL;
     }
 
     entry->key = share_key (pte);
-    entry->inode = pte->file->inode;
+    entry->inode = file_get_inode (pte->file);
     entry->ofs = pte->ofs;
-    entry->frame = frame;
+    entry->page = page;
     list_init (&entry->sharing_threads);
     sharing_thread *share = create_sharing_thread (thread_current ());
     list_push_back (&entry->sharing_threads, &share->elem);
@@ -40,16 +43,18 @@ create_share_entry (supp_pte *pte, frame_table_entry *frame) {
 
 
 
-void set_share_entry_frame (share_entry *entry, frame_table_entry *frame) {
-  entry->frame = frame;
+void set_share_entry_page (share_entry *entry, void *page) {
+  entry->page = page;
 }
 
 
 void 
 init_share_table (void) {
-  hash_init (&share_table, share_hash, share_hash_compare, NULL);
+  hash_init (&share_table, &share_hash, &share_hash_compare, NULL);
   lock_init (&share_table_lock);
 }
+
+
 
 
 unsigned 
@@ -57,6 +62,7 @@ share_hash (const struct hash_elem *e, void *aux UNUSED) {
   const share_entry *entry = hash_entry (e, share_entry, elem);
   return hash_int (entry->key);
 }
+
 
 
 bool 
@@ -68,8 +74,9 @@ share_hash_compare (const struct hash_elem *a, const struct hash_elem *b, void *
 }
 
 
+
 void 
-destroy_elem (struct hash_elem *e, void *aux UNUSED) {
+share_destroy (struct hash_elem *e, void *aux UNUSED) {
   share_entry *entry = hash_entry (e, share_entry, elem);
   struct list_elem *el;
   for (el = list_begin (&entry->sharing_threads); el != list_end (&entry->sharing_threads); el = list_next (el)) {

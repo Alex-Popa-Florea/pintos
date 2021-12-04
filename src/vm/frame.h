@@ -5,6 +5,8 @@
 #include "lib/kernel/list.h"
 #include "threads/thread.h"
 #include "threads/synch.h"
+#include "filesys/file.h"
+#include "filesys/off_t.h"
 
 /*
   Type for the number which identifies an allocated page
@@ -16,8 +18,10 @@ typedef int frame_nr;
   Struct to store an entry in the frame table 
 */
 typedef struct {
-  void *page;                
-  struct list_elem elem;
+  void *page;               /* The page where data is stored */                
+  struct list_elem elem;    /* Elem to insert into frame table */
+  struct inode *inode;      /* Inode to find a share table entry */
+  off_t ofs;                /* Offset to find a share table entry */
 } frame_table_entry;
 
 
@@ -46,7 +50,15 @@ void init_frame_table (void);
 frame_table_entry *try_allocate_page (enum palloc_flags);
 
 
-/* Frees the given page and its corresponding frame table entry */
+/*
+  Sets the inode and offset members of a frame table entry
+*/
+void set_inode_and_ofs (frame_table_entry *, struct inode *, off_t);
+
+
+/*
+  Frees the given page and its corresponding frame table entry
+*/
 void free_frame_table_entry_from_page (void* page);
 
 

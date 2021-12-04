@@ -23,7 +23,7 @@ static long long page_fault_cnt;
 static void kill (struct intr_frame *);
 static void page_fault (struct intr_frame *);
 static void print_page_fault (void *, bool, bool, bool);
-static void *load_page (supp_pte *);
+static bool load_page (supp_pte *);
 static bool load_mmap_page (supp_pte *);
 
 /* Registers handlers for interrupts that can be caused by user
@@ -191,35 +191,7 @@ page_fault (struct intr_frame *f)
           break;
 
         case DISK:
-          /* Only non-writable pages can be shared */
-          if (!entry->writable) {
-            share_entry search_entry;
-            search_entry.key = share_key (entry);
-            struct hash_elem *search_elem = hash_find (&share_table, &search_entry.elem);
-
-            if (search_elem != NULL) {
-              /* Entry already exists in the share table */
-              share_entry *found_entry = hash_entry (search_elem, share_entry, elem);
-              
-              if (found_entry->page != NULL) {
-                /* Page has already been allocated so it is shared */
-                install_page (entry->addr, found_entry->page, entry->writable);
-                load_success = true;
-                break;
-              }
-            }
-          }
-
-          /* Allocate a frame */
-          void *allocated_page = load_page (entry);
-          load_success = allocated_page == NULL ? false : true;
-
-          /* Add the new frame to the share table */
-          if (load_success) {
-            share_entry *new_share_entry = create_share_entry (entry);
-            set_share_entry_page (new_share_entry, allocated_page);
-            hash_insert (&share_table, &new_share_entry->elem);
-          }
+          load_success = load_page (entry);
           break;
 
         default:
@@ -292,26 +264,55 @@ load_stack_page (supp_pte *entry) {
 
 /*
   Loads a page from a supplemental page table entry into an active page, 
-  using the frame table
-  Returns the pointer to the active page, NULL if not 
+  using the frame table. If the page is readable, checks the share table and
+  inserts if not present. Returns true
 */
-static void *
+static bool
 load_page (supp_pte *entry) {
+
+  /* Check the share table for read-only pages 
+     to see if there is already an entry */
+  if (!entry->writable && entry->page_source == DISK) {
+    lock_acquire (&share_table_lock);
+    share_entry search_entry;
+    search_entry.key = share_key (entry);
+    struct hash_elem *search_elem = hash_find (&share_table, &search_entry.elem);
+    if (search_elem != NULL) {
+      /* Page has already been allocated so it can be shared */
+      share_entry *found_entry = hash_entry (search_elem, share_entry, elem);
+      install_page (entry->addr, found_entry->page, entry->writable);
+      lock_release (&share_table_lock);
+      return true;
+    } else {
+      lock_release (&share_table_lock);
+    }
+  }
 
   /* Get a new page of memory. */
   frame_table_entry *new_frame = try_allocate_page (PAL_USER);
+  set_inode_and_ofs (new_frame, file_get_inode (entry->file), entry->ofs);
+
   uint8_t *kpage = new_frame->page;
 
   if (kpage == NULL) {
-    return NULL;
+    return false;
   }
 
   /* Add the page to the process's address space. */
   if (!install_page (entry->addr, kpage, entry->writable)) {
     free_frame_from_supp_pte (&entry->elem, NULL);
     palloc_free_page (kpage);
-    return NULL;
+    return false;
   }
+
+  /* Add the frame to the share table if readable */
+  if (!entry->writable && entry->page_source == DISK) {
+    share_entry *new_share_entry = create_share_entry (entry, kpage);
+    lock_acquire (&share_table_lock);
+    hash_insert (&share_table, &new_share_entry->elem);
+    lock_release (&share_table_lock);
+  }
+
   
   /* Load data into the page from the file system */
   lock_acquire (&file_system_lock);
@@ -322,13 +323,13 @@ load_page (supp_pte *entry) {
   if (bytes_read != (off_t) entry->read_bytes) {
     free_frame_from_supp_pte (&entry->elem, NULL);
     palloc_free_page (kpage);
-    return NULL;
+    return false;
   }
 
   /* Set the remaining bytes of the page to 0 */
   memset (kpage + entry->read_bytes, 0, entry->zero_bytes);
   entry->page_frame = new_frame;
-  return kpage;
+  return true;
 }
 
 

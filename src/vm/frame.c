@@ -26,12 +26,20 @@ try_allocate_page (enum palloc_flags flags) {
   if (page) {
     frame_table_entry *new_frame = (frame_table_entry *) malloc (sizeof (frame_table_entry));
     new_frame->page = page;
+    new_frame->inode = NULL;
+    new_frame->ofs = NULL;
     lock_acquire (&frame_table_lock);
     list_push_back (&frame_table, &new_frame->elem);
     lock_release (&frame_table_lock);
     return new_frame;
   } 
   return NULL;
+}
+
+
+void set_inode_and_ofs (frame_table_entry *entry, struct inode *inode, off_t ofs) {
+  entry->inode = inode;
+  entry->ofs = ofs;
 }
 
 /*
