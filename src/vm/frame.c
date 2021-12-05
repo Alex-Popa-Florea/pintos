@@ -12,7 +12,10 @@
 #include "userprog/pagedir.h"
 #include <stdio.h>
 
+/* Global Frame Table */
 struct list frame_table;
+
+/* Global Frame Table Lock */
 struct lock frame_table_lock; 
 
 void 

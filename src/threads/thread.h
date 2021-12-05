@@ -104,7 +104,6 @@ struct thread
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
     
-    struct hash supp_page_table;        /* Supplemental page table */
     
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
@@ -117,6 +116,9 @@ struct thread
 
     int current_mmapped_id;              /* Stores the mmapped id of the last file mapped */  
     struct list mmapped_file_list;       /* Stores the list of files mapped by the thread. */
+    
+    /* Members used for Virtual Memory */
+    struct hash supp_page_table;        /* Supplemental Page Table */
 #endif
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */

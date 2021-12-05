@@ -21,7 +21,9 @@ static long long page_fault_cnt;
 
 static void kill (struct intr_frame *);
 static void page_fault (struct intr_frame *);
-static void print_page_fault (void *fault_addr, bool not_present, bool write, bool user);
+static void print_page_fault (void *, bool, bool, bool);
+static bool acquire_filesys_lock (bool);
+static bool release_filesys_lock (bool);
 
 /* Registers handlers for interrupts that can be caused by user
    programs.
@@ -240,11 +242,14 @@ load_page (supp_pte *entry) {
     return false; 
   }
   
-  lock_acquire (&file_system_lock);
+  bool held = false;
+  held = acquire_filesys_lock (held);
+
   file_seek (entry->file, entry->ofs);
   /* Load data into the page. */
   off_t bytes_read = file_read (entry->file, kpage, entry->read_bytes);
-  lock_release (&file_system_lock);
+
+  held = release_filesys_lock (held);
 
   if (bytes_read != (off_t) entry->read_bytes) {
     lock_acquire (&frame_table_lock);
@@ -297,11 +302,14 @@ load_mmap_page (supp_pte *entry) {
     return false; 
   }
   
-  lock_acquire (&file_system_lock);
+  bool held = false;
+  held = acquire_filesys_lock (held);
+
   file_seek (entry->file, entry->ofs);
   /* Load data into the page. */
   off_t bytes_read = file_read (entry->file, kpage, entry->read_bytes);
-  lock_release (&file_system_lock);
+
+  held = release_filesys_lock (held);
 
   if (bytes_read != (off_t) entry->read_bytes) {
     lock_acquire (&frame_table_lock);
@@ -339,4 +347,23 @@ load_swap_space_page (supp_pte *entry) {
 
   return true;
 
+}
+
+/* Acquires the file system lock if the current thread  */
+static bool
+acquire_filesys_lock (bool held) {
+  if (!lock_held_by_current_thread (&file_system_lock)) {
+    lock_acquire (&file_system_lock);
+    held = true;
+  }
+  return held;
+}
+
+/* Releases the file system lock if the current thread currently holds it */
+static bool
+release_filesys_lock (bool held) {
+  if (held) {
+    held = false;
+    lock_release (&file_system_lock);
+  }
 }

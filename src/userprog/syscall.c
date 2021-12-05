@@ -584,7 +584,13 @@ verify_address (const void *vaddr) {
   if (!is_user_vaddr (vaddr)) {
     exit (-1);
   }
-  if (!pagedir_get_page (thread_current ()->pagedir, vaddr)) {
+  
+  struct hash *supp_page_table = &thread_current ()->supp_page_table;
+  supp_pte old_entry_query;
+  old_entry_query.addr = pg_round_down (vaddr);
+  struct hash_elem *old_entry_elem = hash_find (supp_page_table, &old_entry_query.elem);
+  
+  if (!old_entry_elem) {
     exit (-1);
   }
 }
