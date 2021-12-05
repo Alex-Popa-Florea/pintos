@@ -27,4 +27,7 @@ bool load_stack_page (supp_pte *entry);
 */
 bool load_mmap_page (supp_pte *entry);
 
+
+bool load_swap_space_page (supp_pte *entry);
+
 #endif /* userprog/exception.h */

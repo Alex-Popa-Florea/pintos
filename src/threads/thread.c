@@ -120,8 +120,6 @@ thread_init (void)
     lock_init (&pcb_list_lock);
   #endif
 
-  init_frame_table ();
-
   /* Set up a thread structure for the running thread. */
   init_thread (initial_thread, "main", PRI_DEFAULT);
   initial_thread->status = THREAD_RUNNING;

@@ -19,19 +19,20 @@ typedef int frame_nr;
 typedef struct {
   void *page;                
   struct list_elem elem;
+  bool r_bit;               // Reference bit
 } frame_table_entry;
 
 
 /*
   Global list to track the pages which are occupied
 */
-struct list frame_table;
+extern struct list frame_table;
 
 
 /*
   Lock to ensure synchronized access to the frame table
 */
-struct lock frame_table_lock;
+extern struct lock frame_table_lock;
 
 
 /*
@@ -44,7 +45,7 @@ void init_frame_table (void);
   Tries to allocate a page of memory using the flags provided
   Returns the pointer to page frame if successful, otherwise NULL
 */
-frame_table_entry *try_allocate_page (enum palloc_flags);
+frame_table_entry *try_allocate_page (enum palloc_flags flags, void *entry);
 
 
 /*
@@ -59,10 +60,5 @@ void free_frame_from_supp_pte (struct hash_elem *e, void *aux UNUSED);
 */
 void free_frame_table_entries_of_thread (struct thread *);
 
-
-/*
-  Retrieves the number of a page from a frame table entry
-*/
-frame_nr get_frame_nr (frame_table_entry *);
 
 #endif 

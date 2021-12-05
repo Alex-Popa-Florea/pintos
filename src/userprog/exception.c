@@ -156,13 +156,12 @@ page_fault (struct intr_frame *f)
   not_present = (f->error_code & PF_P) == 0;
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
-
   /* 
    If page fault occurred because page is not present, 
    loads the page from the current thread's supplemental page table
   */
   bool load_success = false;
-  if (not_present && is_user_vaddr(fault_addr)) {
+  if (not_present && is_user_vaddr (fault_addr)) {
       struct thread *t = thread_current ();
       supp_pte fault_entry;
       fault_entry.addr = pg_round_down (fault_addr);
@@ -184,7 +183,7 @@ page_fault (struct intr_frame *f)
           break;
         
         case SWAP_SPACE:
-          load_success = load_page_into_swap_space (entry);
+          load_success = load_swap_space_page (entry);
           break;
 
         case DISK:
@@ -197,7 +196,10 @@ page_fault (struct intr_frame *f)
       }
   } 
 
-  if ((PHYS_BASE - pg_round_down (fault_addr)) <= (1 << 23) && (uint32_t*) fault_addr >= (f->esp - 32) && is_user_vaddr(fault_addr)) {
+  bool stack_is_bellow_limit = (PHYS_BASE - pg_round_down (fault_addr)) <= (1 << 23);
+  bool pointer_is_valid = (uint32_t*) fault_addr >= f->esp || (uint32_t*) fault_addr == f->esp - 32 || (uint32_t*) fault_addr == f->esp - 34;
+
+  if (!load_success && stack_is_bellow_limit && pointer_is_valid && is_user_vaddr(fault_addr)) {
     struct hash_elem *entry_elem = setup_pte_for_stack (fault_addr);
     supp_pte *entry = hash_entry (entry_elem, supp_pte, elem);
     load_success = load_stack_page (entry);
@@ -223,7 +225,7 @@ bool
 load_page (supp_pte *entry) {
 
   /* Get a new page of memory. */
-  frame_table_entry *new_frame = try_allocate_page (PAL_USER);
+  frame_table_entry *new_frame = try_allocate_page (PAL_USER, entry);
   uint8_t *kpage = new_frame->page;
 
   if (kpage == NULL) {
@@ -232,8 +234,9 @@ load_page (supp_pte *entry) {
 
   /* Add the page to the process's address space. */
   if (!install_page (entry->addr, kpage, entry->writable)) {
+    lock_acquire (&frame_table_lock);
     free_frame_from_supp_pte (&entry->elem, NULL);
-    palloc_free_page (kpage);
+    lock_release (&frame_table_lock);
     return false; 
   }
   
@@ -244,8 +247,9 @@ load_page (supp_pte *entry) {
   lock_release (&file_system_lock);
 
   if (bytes_read != (off_t) entry->read_bytes) {
+    lock_acquire (&frame_table_lock);
     free_frame_from_supp_pte (&entry->elem, NULL);
-    palloc_free_page (kpage);
+    lock_release (&frame_table_lock);
     return false; 
   }
 
@@ -258,7 +262,7 @@ load_page (supp_pte *entry) {
 bool 
 load_stack_page (supp_pte *entry) {
 
-  frame_table_entry *new_frame = try_allocate_page (PAL_USER);
+  frame_table_entry *new_frame = try_allocate_page (PAL_USER, entry);
   uint8_t *kpage = new_frame->page;
 
   if (!kpage) {
@@ -266,8 +270,9 @@ load_stack_page (supp_pte *entry) {
   }
   
   if (!install_page (entry->addr, kpage, entry->writable)) {
+    lock_acquire (&frame_table_lock);
     free_frame_from_supp_pte (&entry->elem, NULL);
-    palloc_free_page (kpage);
+    lock_release (&frame_table_lock);
     return false;
   }
 
@@ -278,7 +283,7 @@ load_stack_page (supp_pte *entry) {
 bool
 load_mmap_page (supp_pte *entry) {
 
-  frame_table_entry *new_frame = try_allocate_page (PAL_USER);
+  frame_table_entry *new_frame = try_allocate_page (PAL_USER, entry);
   uint8_t *kpage = new_frame->page;
   if (kpage == NULL) {
     return false;
@@ -286,8 +291,9 @@ load_mmap_page (supp_pte *entry) {
 
   /* Add the page to the process's address space. */
   if (!install_page (entry->addr, kpage, entry->writable)) {
+    lock_acquire (&frame_table_lock);
     free_frame_from_supp_pte (&entry->elem, NULL);
-    palloc_free_page (kpage);
+    lock_release (&frame_table_lock);
     return false; 
   }
   
@@ -298,8 +304,9 @@ load_mmap_page (supp_pte *entry) {
   lock_release (&file_system_lock);
 
   if (bytes_read != (off_t) entry->read_bytes) {
+    lock_acquire (&frame_table_lock);
     free_frame_from_supp_pte (&entry->elem, NULL);
-    palloc_free_page (kpage);
+    lock_release (&frame_table_lock);
     return false; 
   }
 
@@ -307,4 +314,29 @@ load_mmap_page (supp_pte *entry) {
   memset (kpage + entry->read_bytes, 0, entry->zero_bytes);
   entry->page_frame = new_frame;
   return true;
+}
+
+bool
+load_swap_space_page (supp_pte *entry) {
+
+  /* Get a new page of memory. */
+  frame_table_entry *new_frame = try_allocate_page (PAL_USER, entry);
+  uint8_t *kpage = new_frame->page;
+
+  if (kpage == NULL) {
+    return false;
+  }
+
+  /* Add the page to the process's address space. */
+  if (!install_page (entry->addr, kpage, entry->writable)) {
+    lock_acquire (&frame_table_lock);
+    free_frame_from_supp_pte (&entry->elem, NULL);
+    lock_release (&frame_table_lock);
+    return false; 
+  }
+
+  retrieve_from_swap_space (kpage, entry->addr);
+
+  return true;
+
 }

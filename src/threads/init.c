@@ -37,6 +37,7 @@
 #include "filesys/filesys.h"
 #include "filesys/fsutil.h"
 #endif
+#include "vm/swap.h"
 
 /* Page directory with kernel mappings only. */
 uint32_t *init_page_dir;
@@ -127,6 +128,8 @@ main (void)
   filesys_init (format_filesys);
 #endif
 
+  initialise_swap_space ();
+  init_frame_table ();
   printf ("Boot complete.\n");
   
   /* Run actions specified on kernel command line. */
