@@ -37,5 +37,6 @@ create_supp_pte (struct file *file, off_t ofs, uint8_t *upage,
   entry->is_dirty = false;
   entry->page_source = source;
   entry->page_frame = NULL;
+  entry->is_in_swap_space = false;
   return entry;
 }

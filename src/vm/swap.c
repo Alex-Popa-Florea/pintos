@@ -27,7 +27,6 @@ void initialise_swap_space (void) {
 bool load_page_into_swap_space (void *page) {
     lock_acquire (&bitmap_lock);
     lock_acquire (&swap_table_lock);
-
     /*
         Finds first contiguous sectors of BLOCK_SWAP to store whole page
     */
@@ -72,6 +71,7 @@ void retrieve_from_swap_space (void *page, uint8_t *addr) {
         Find index of first sector of page from swap table 
     */
     struct hash_elem *found_elem = hash_find (&swap_table, &entry.elem);
+    
     size_t index = hash_entry (found_elem, swap_entry, elem)->index;
 
     /* 

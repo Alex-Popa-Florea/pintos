@@ -8,9 +8,8 @@
 
 /* Enum to represent source of page */
 enum source {
-  MMAP,                          /* Loading from a memory mapped filed */   
+  MMAP,                          /* Loading from a memory-mapped file */   
   STACK,                         /* Stack Page */  
-  SWAP_SPACE,                          /* Page stored on swap space */
   DISK                           /* Stored on file system */
 };
 
@@ -26,8 +25,10 @@ typedef struct {
   bool writable;                      /* Records if page should be writable or read-only */
   bool is_dirty;                      /* Records if a page has been modified, and hence needs writing to disk */
   enum source page_source;            /* Records the source of the page */
+  bool is_in_swap_space;              /* Records if a page is in swap */
+  
   frame_table_entry *page_frame;      /* Pointer to page frame if page is loaded to frame table, null otherwise */
-   
+
   struct hash_elem elem;              /* Hash table elem */
 } supp_pte;
 

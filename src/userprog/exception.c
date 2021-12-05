@@ -181,15 +181,19 @@ page_fault (struct intr_frame *f)
           break;
         
         case STACK:
-          load_success = load_stack_page (entry);
-          break;
-        
-        case SWAP_SPACE:
-          load_success = load_swap_space_page (entry);
+          if (entry->is_in_swap_space) {
+            load_success = load_swap_space_page (entry);
+          } else {
+            load_success = load_stack_page (entry);
+          }
           break;
 
         case DISK:
-          load_success = load_page (entry);
+          if (entry->is_in_swap_space) {
+            load_success = load_swap_space_page (entry);
+          } else {
+            load_success = load_page (entry);
+          }
           break;
 
         default:
@@ -198,15 +202,16 @@ page_fault (struct intr_frame *f)
       }
   } 
 
-  bool stack_is_bellow_limit = (PHYS_BASE - pg_round_down (fault_addr)) <= (1 << 23);
+  bool stack_is_below_limit = (PHYS_BASE - pg_round_down (fault_addr)) <= (1 << 23);
   bool pointer_is_valid = (uint32_t*) fault_addr >= f->esp || (uint32_t*) fault_addr == f->esp - 32 || (uint32_t*) fault_addr == f->esp - 4;
 
-  if (!load_success && stack_is_bellow_limit && pointer_is_valid && is_user_vaddr(fault_addr)) {
+  if (!load_success && stack_is_below_limit && pointer_is_valid && is_user_vaddr (fault_addr)) {
+    
     struct hash_elem *entry_elem = setup_pte_for_stack (fault_addr);
     supp_pte *entry = hash_entry (entry_elem, supp_pte, elem);
     load_success = load_stack_page (entry);
   }
-
+  
   if (!load_success) {
     print_page_fault (fault_addr, not_present, write, user);
     kill (f);
@@ -344,12 +349,15 @@ load_swap_space_page (supp_pte *entry) {
   }
 
   retrieve_from_swap_space (kpage, entry->addr);
-
+  entry->is_in_swap_space = false;
   return true;
-
 }
 
-/* Acquires the file system lock if the current thread  */
+
+/*
+  Acquires the file system lock of the current thread
+  Returns true if the lock is acquired
+*/
 static bool
 acquire_filesys_lock (bool held) {
   if (!lock_held_by_current_thread (&file_system_lock)) {
@@ -359,7 +367,9 @@ acquire_filesys_lock (bool held) {
   return held;
 }
 
-/* Releases the file system lock if the current thread currently holds it */
+/*
+  Releases the file system lock if the current thread currently holds it
+*/
 static bool
 release_filesys_lock (bool held) {
   if (held) {
