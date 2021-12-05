@@ -84,6 +84,7 @@ share_destroy (struct hash_elem *e, void *aux UNUSED) {
   for (el = list_begin (&entry->sharing_threads); el != list_end (&entry->sharing_threads); el = list_next (el)) {
     sharing_thread *item = list_entry (el, sharing_thread, elem);
     free (item);
+    
   }
   free (entry);
 }

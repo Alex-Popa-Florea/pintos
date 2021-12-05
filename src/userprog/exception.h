@@ -18,4 +18,7 @@ void exception_print_stats (void);
 bool load_stack_page (supp_pte *);
 
 
+
+bool load_swap_space_page (supp_pte *entry);
+
 #endif /* userprog/exception.h */

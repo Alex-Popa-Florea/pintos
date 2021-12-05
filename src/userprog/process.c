@@ -88,9 +88,6 @@ static bool check_stack_overflow (void *esp, unsigned long dcr) {
 }
 
 static bool add_byte_to_stack (void **esp, uint8_t arg) {
-  if (!check_stack_overflow (esp, sizeof (uint8_t))) {
-    return false;
-  }
   *esp = *esp - sizeof (uint8_t);
   *((uint8_t *)*esp) = arg;
 
@@ -98,10 +95,6 @@ static bool add_byte_to_stack (void **esp, uint8_t arg) {
 }
 
 static bool add_word_to_stack (void **esp, uint32_t arg) {
-  if (!check_stack_overflow (esp, sizeof (uint32_t))) {
-    return false;
-  }
-
   *esp = *esp - sizeof (uint32_t);
   *((uint32_t *)*esp) = arg;
 
@@ -109,9 +102,6 @@ static bool add_word_to_stack (void **esp, uint32_t arg) {
 }
 
 static bool add_string_to_stack (void **esp, char *string, int len) {
-  if (!check_stack_overflow (esp, sizeof (char) * (len + 1))) {
-    return false;
-  }
   *esp = *esp - sizeof (char) * (len + 1);
   strlcpy (*esp, string, sizeof (char) * (len + 1));
 
@@ -705,6 +695,7 @@ set_up_pte_for_stack (void *upage) {
   entry->addr = pg_round_down (upage);
   entry->writable = true;
   entry->page_source = STACK;
+  entry->is_in_swap_space = false;
   hash_insert (&thread_current ()->supp_page_table, &entry->elem);
   return &entry->elem;
 }

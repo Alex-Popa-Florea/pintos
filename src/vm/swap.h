@@ -10,7 +10,7 @@
 #include "devices/block.h"
 
 /* Calculates number of sectors in BLOCK_SWAP */
-#define NUM_SWAP_BLOCK_SECTORS (block_size (block_get_role (BLOCK_SWAP)) / BLOCK_SECTOR_SIZE)
+#define NUM_SWAP_BLOCK_SECTORS (block_size (block_get_role (BLOCK_SWAP)))
 
 /* Calculates the number of sectors needed to store a page */
 #define SECTORS_PER_PAGE (PGSIZE / BLOCK_SECTOR_SIZE)
@@ -22,7 +22,7 @@
 struct bitmap *sector_bitmap;
 
 /* Swap Table */
-struct hash *swap_table;
+extern struct hash swap_table;
 
 /*
   Struct for an entry in swap table
@@ -37,12 +37,12 @@ typedef struct {
 /*
   Lock to ensure synchronized access to the swap table
 */
-struct lock swap_table_lock;
+extern struct lock swap_table_lock;
 
 /*
   Lock to ensure synchronized access to the bitmap
 */
-struct lock bitmap_lock;
+extern struct lock bitmap_lock;
 
 /*
 	Initialise Swap Table hash table and bitmap to represent occupied sectors

@@ -7,6 +7,7 @@
 #include "threads/synch.h"
 #include "filesys/file.h"
 #include "filesys/off_t.h"
+#include "debug.h"
 
 /*
   Type for the number which identifies an allocated page
@@ -22,6 +23,7 @@ typedef struct {
   struct list_elem elem;    /* Elem to insert into frame table */
   struct inode *inode;      /* Inode to find a share table entry */
   off_t ofs;                /* Offset to find a share table entry */
+  bool r_bit;               /* Reference bit */
 } frame_table_entry;
 
 
@@ -47,7 +49,8 @@ void init_frame_table (void);
   Tries to allocate a page of memory using the flags provided
   Returns the pointer to page frame if successful, otherwise NULL
 */
-frame_table_entry *try_allocate_page (enum palloc_flags);
+frame_table_entry *try_allocate_page (enum palloc_flags flags, void *entry);
+// frame_table_entry *try_allocate_page (enum palloc_flags);
 
 
 /*
@@ -56,28 +59,20 @@ frame_table_entry *try_allocate_page (enum palloc_flags);
 void set_inode_and_ofs (frame_table_entry *, struct inode *, off_t);
 
 
-/*
-  Frees the given page and its corresponding frame table entry
-*/
-void free_frame_table_entry_from_page (void* page);
-
-
-/*
-  Frees the given page in a thread's supplemental page table 
-  and its corresponding frame table entry
-*/
-void free_frame_from_supp_pte (struct hash_elem *e, void *aux UNUSED);
-
+// /*
+//   Frees the given page and its corresponding frame table entry
+// */
+// void free_frame_table_entry_from_page (void* page);
 
 /*
   Frees the memory for all pages associated with a thread
 */
 void free_frame_table_entries_of_thread (struct thread *);
 
-
 /*
-  Retrieves the number of a page from a frame table entry
+  Frees the given page in a thread's supplemental page table 
+  and its corresponding frame table entry
 */
-frame_nr get_frame_nr (frame_table_entry *);
+void free_frame_from_supp_pte (struct hash_elem *, void * UNUSED);
 
 #endif 

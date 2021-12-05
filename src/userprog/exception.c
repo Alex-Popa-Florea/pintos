@@ -25,6 +25,8 @@ static void page_fault (struct intr_frame *);
 static void print_page_fault (void *, bool, bool, bool);
 static bool load_page (supp_pte *);
 static bool load_mmap_page (supp_pte *);
+static bool acquire_filesys_lock (bool);
+static bool release_filesys_lock (bool);
 
 /* Registers handlers for interrupts that can be caused by user
    programs.
@@ -159,7 +161,6 @@ page_fault (struct intr_frame *f)
   not_present = (f->error_code & PF_P) == 0;
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
-
   /* 
    If page fault occurred because page is not present, 
    loads the page from the current thread's supplemental page table
@@ -183,15 +184,19 @@ page_fault (struct intr_frame *f)
           break;
         
         case STACK:
-          load_success = load_stack_page (entry);
-          break;
-        
-        case SWAP_SPACE:
-          load_success = load_page_into_swap_space (entry);
+          if (entry->is_in_swap_space) {
+            load_success = load_swap_space_page (entry);
+          } else {
+            load_success = load_stack_page (entry);
+          }
           break;
 
         case DISK:
-          load_success = load_page (entry);
+          if (entry->is_in_swap_space) {
+            load_success = load_swap_space_page (entry);
+          } else {
+            load_success = load_page (entry);
+          }
           break;
 
         default:
@@ -216,12 +221,12 @@ page_fault (struct intr_frame *f)
                               || (uint32_t*) fault_addr == f->esp - 4;
 
 
-  if (not_overflow && valid_fault_address && is_user_vaddr (fault_addr)) {
+  if (!load_success && not_overflow && valid_fault_address && is_user_vaddr (fault_addr)) {
     struct hash_elem *entry_elem = set_up_pte_for_stack (fault_addr);
     supp_pte *entry = hash_entry (entry_elem, supp_pte, elem);
     load_success = load_stack_page (entry);
   }
-
+  
   if (!load_success) {
     print_page_fault (fault_addr, not_present, write, user);
     kill (f);
@@ -244,7 +249,7 @@ print_page_fault (void *fault_addr, bool not_present, bool write, bool user)
 bool 
 load_stack_page (supp_pte *entry) {
 
-  frame_table_entry *new_frame = try_allocate_page (PAL_USER);
+  frame_table_entry *new_frame = try_allocate_page (PAL_USER, entry);
   uint8_t *kpage = new_frame->page;
 
   if (!kpage) {
@@ -289,7 +294,7 @@ load_page (supp_pte *entry) {
   }
 
   /* Get a new page of memory. */
-  frame_table_entry *new_frame = try_allocate_page (PAL_USER);
+  frame_table_entry *new_frame = try_allocate_page (PAL_USER, entry);
   set_inode_and_ofs (new_frame, file_get_inode (entry->file), entry->ofs);
 
   uint8_t *kpage = new_frame->page;
@@ -300,8 +305,10 @@ load_page (supp_pte *entry) {
 
   /* Add the page to the process's address space. */
   if (!install_page (entry->addr, kpage, entry->writable)) {
+    lock_acquire (&frame_table_lock);
     free_frame_from_supp_pte (&entry->elem, NULL);
     palloc_free_page (kpage);
+    lock_release (&frame_table_lock);
     return false;
   }
 
@@ -314,15 +321,19 @@ load_page (supp_pte *entry) {
   }
 
   
-  /* Load data into the page from the file system */
-  lock_acquire (&file_system_lock);
+  bool held = false;
+  held = acquire_filesys_lock (held);
+
   file_seek (entry->file, entry->ofs);
   off_t bytes_read = file_read (entry->file, kpage, entry->read_bytes);
-  lock_release (&file_system_lock);
+
+  held = release_filesys_lock (held);
 
   if (bytes_read != (off_t) entry->read_bytes) {
+    lock_acquire (&frame_table_lock);
     free_frame_from_supp_pte (&entry->elem, NULL);
     palloc_free_page (kpage);
+    lock_release (&frame_table_lock);
     return false;
   }
 
@@ -333,8 +344,6 @@ load_page (supp_pte *entry) {
 }
 
 
-
-
 /*
   Loads a memory mapped file page from a supplemental page table entry
   into an active page
@@ -342,7 +351,7 @@ load_page (supp_pte *entry) {
 static bool
 load_mmap_page (supp_pte *entry) {
 
-  frame_table_entry *new_frame = try_allocate_page (PAL_USER);
+  frame_table_entry *new_frame = try_allocate_page (PAL_USER, entry);
   uint8_t *kpage = new_frame->page;
   if (kpage == NULL) {
     return false;
@@ -350,20 +359,25 @@ load_mmap_page (supp_pte *entry) {
 
   /* Add the page to the process's address space. */
   if (!install_page (entry->addr, kpage, entry->writable)) {
+    lock_acquire (&frame_table_lock);
     free_frame_from_supp_pte (&entry->elem, NULL);
-    palloc_free_page (kpage);
+    lock_release (&frame_table_lock);
     return false; 
   }
   
-  lock_acquire (&file_system_lock);
+  bool held = false;
+  held = acquire_filesys_lock (held);
+
   file_seek (entry->file, entry->ofs);
   /* Load data into the page. */
   off_t bytes_read = file_read (entry->file, kpage, entry->read_bytes);
-  lock_release (&file_system_lock);
+
+  held = release_filesys_lock (held);
 
   if (bytes_read != (off_t) entry->read_bytes) {
+    lock_acquire (&frame_table_lock);
     free_frame_from_supp_pte (&entry->elem, NULL);
-    palloc_free_page (kpage);
+    lock_release (&frame_table_lock);
     return false; 
   }
 
@@ -371,4 +385,54 @@ load_mmap_page (supp_pte *entry) {
   memset (kpage + entry->read_bytes, 0, entry->zero_bytes);
   entry->page_frame = new_frame;
   return true;
+}
+
+bool
+load_swap_space_page (supp_pte *entry) {
+
+  /* Get a new page of memory. */
+  frame_table_entry *new_frame = try_allocate_page (PAL_USER, entry);
+  uint8_t *kpage = new_frame->page;
+
+  if (kpage == NULL) {
+    return false;
+  }
+
+  /* Add the page to the process's address space. */
+  if (!install_page (entry->addr, kpage, entry->writable)) {
+    lock_acquire (&frame_table_lock);
+    free_frame_from_supp_pte (&entry->elem, NULL);
+    lock_release (&frame_table_lock);
+    return false; 
+  }
+
+  retrieve_from_swap_space (kpage, entry->addr);
+  entry->is_in_swap_space = false;
+  return true;
+}
+
+
+/*
+  Acquires the file system lock of the current thread
+  Returns true if the lock is acquired
+*/
+static bool
+acquire_filesys_lock (bool held) {
+  if (!lock_held_by_current_thread (&file_system_lock)) {
+    lock_acquire (&file_system_lock);
+    held = true;
+  }
+  return held;
+}
+
+/*
+  Releases the file system lock if the current thread currently holds it
+*/
+static bool
+release_filesys_lock (bool held) {
+  if (held) {
+    held = false;
+    lock_release (&file_system_lock);
+  }
+  return held;
 }
