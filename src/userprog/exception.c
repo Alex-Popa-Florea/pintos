@@ -199,7 +199,7 @@ page_fault (struct intr_frame *f)
   } 
 
   bool stack_is_bellow_limit = (PHYS_BASE - pg_round_down (fault_addr)) <= (1 << 23);
-  bool pointer_is_valid = (uint32_t*) fault_addr >= f->esp || (uint32_t*) fault_addr == f->esp - 32 || (uint32_t*) fault_addr == f->esp - 34;
+  bool pointer_is_valid = (uint32_t*) fault_addr >= f->esp || (uint32_t*) fault_addr == f->esp - 32 || (uint32_t*) fault_addr == f->esp - 4;
 
   if (!load_success && stack_is_bellow_limit && pointer_is_valid && is_user_vaddr(fault_addr)) {
     struct hash_elem *entry_elem = setup_pte_for_stack (fault_addr);
