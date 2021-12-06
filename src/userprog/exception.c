@@ -280,13 +280,23 @@ load_page (supp_pte *entry) {
   /* Check the share table for read-only pages 
      to see if there is already an entry */
   if (!entry->writable && entry->page_source == DISK) {
+    frame_table_entry search_frame;
+    search_frame.inode = file_get_inode (entry->file);
+    search_frame.ofs = entry->ofs;
+
     share_entry search_entry;
-    search_entry.inode = file_get_inode (entry->file);
-    search_entry.ofs = entry->ofs;
+    search_entry.frame = &search_frame;
+
     struct hash_elem *search_elem = hash_find (&share_table, &search_entry.elem);
     if (search_elem != NULL) {
       /* Page has already been allocated so it can be shared */
       share_entry *found_entry = hash_entry (search_elem, share_entry, elem);
+
+      // Add to list of pages in frame
+      entry->page_frame = found_entry->frame;
+      list_push_back (&found_entry->sharing_pages, &entry->share_elem);
+
+
       install_page (entry->addr, found_entry->page, entry->writable);
       release_tables ();
       return true;

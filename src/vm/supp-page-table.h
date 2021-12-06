@@ -32,6 +32,7 @@ typedef struct {
   struct thread *thread;
 
   struct hash_elem elem;              /* Hash table elem */
+  struct list_elem share_elem;        /* List elem for share table */ 
 } supp_pte;
 
 

@@ -696,7 +696,7 @@ set_up_pte_for_stack (void *upage) {
   entry->writable = true;
   entry->page_source = STACK;
   entry->is_in_swap_space = false;
-  entry->thread = &thread_current ();
+  entry->thread = thread_current ();
   hash_insert (&thread_current ()->supp_page_table, &entry->elem);
   return &entry->elem;
 }

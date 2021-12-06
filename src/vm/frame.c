@@ -22,7 +22,7 @@ struct lock frame_table_lock;
    Used for the clock algorithm */
 struct list_elem *current_entry_elem;
 
-
+static bool check_page_access_bit (struct list *, frame_table_entry *);
 static struct list_elem *next_frame_table_elem (struct list_elem *e);
 
 static struct list_elem *remove_frame_table_elem (struct list_elem *e);
@@ -35,6 +35,24 @@ init_frame_table (void) {
   current_entry_elem = list_head (&frame_table);
 }
 
+static frame_table_entry *
+create_frame (void *page, supp_pte *entry) {
+  frame_table_entry *new_frame = (frame_table_entry *) malloc (sizeof (frame_table_entry)); // check for malloc
+    if (new_frame == NULL) {
+      return NULL;
+    }
+    new_frame->creator = entry;
+    new_frame->page = page;
+    new_frame->r_bit = false;
+    new_frame->inode = file_get_inode (entry->file);
+    new_frame->ofs = entry->ofs;
+    new_frame->can_be_shared = !(entry->writable) && (entry->page_source == DISK);
+
+    // list_push_back (&new_frame->supp_ptes, &entry->frame_elem);
+    list_push_back (&frame_table, &new_frame->elem);
+    
+    return new_frame;
+}
 
 frame_table_entry *
 try_allocate_page (enum palloc_flags flags, void *entry_ptr) {
@@ -42,19 +60,8 @@ try_allocate_page (enum palloc_flags flags, void *entry_ptr) {
   void *page = palloc_get_page (flags);
 
   if (page) {
-    /* Successful allocation of frame */
-    frame_table_entry *new_frame = (frame_table_entry *) malloc (sizeof (frame_table_entry)); // check for malloc
-    if (new_frame == NULL) {
-      return NULL;
-    }
-    new_frame->page = page;
-    new_frame->r_bit = false;
-    new_frame->inode = file_get_inode (entry->file);
-    new_frame->ofs = entry->ofs;
-
-    list_push_back (&frame_table, &new_frame->elem);
-    
-    return new_frame;
+    /* Successful allocation of frame - creates new frame table entry */
+    return create_frame (page, entry);
   } else {
     /* No frame is free, eviction required */
     evict ();
@@ -68,12 +75,36 @@ try_allocate_page (enum palloc_flags flags, void *entry_ptr) {
 //   entry->ofs = ofs;
 // }
 
-void *
-get_supp_pte_from_page (frame_table_entry *hand) {
+// supp_pte *
+// get_supp_pte_from_page_no_sharing (frame_table_entry *hand) {
+//   struct list_elem *supp_entry = list_head (&hand->supp_ptes);
 
+//   return list_entry (supp_entry, supp_pte, frame_elem);
+// }
+
+static bool
+check_page_access_bit (struct list *entries, frame_table_entry *hand) {
+  bool is_accessed = false;
+  struct list_elem *e;
+
+  for (e = list_begin (entries); e != list_end (entries); e = list_next (e)) {
+    supp_pte *entry = list_entry (e, supp_pte, share_elem);
+
+    struct thread *sharing_thread = entry->thread;
+    uint32_t *pd = sharing_thread->pagedir;
+
+    if (pagedir_is_accessed (pd, hand->page)) {
+      /* Set the reference bit to true because the page has been accessed */
+      hand->r_bit = true;
+      is_accessed = true;
+      pagedir_set_accessed (pd, hand->page, false);
+    }
+  }
+
+  return is_accessed;
 }
 
-
+/* Evicts page based on the clock algorithm */
 void
 evict (void) {
   /* Exit loop once a page has been evicted */
@@ -82,9 +113,18 @@ evict (void) {
     // Hand points to the current frame table entry
     current_entry_elem = next_frame_table_elem (current_entry_elem);
     frame_table_entry *hand = list_entry (current_entry_elem, frame_table_entry, elem);
-    supp_pte *to_be_evicted_entry = (supp_pte *) get_supp_pte_from_page (hand);
+    
+    // Get the 'creator' supp_pte entry from frame - not applicable for sharing;
+    supp_pte *to_be_evicted_entry = hand->creator;
+    
     struct thread *eviction_thread = to_be_evicted_entry->thread;
     uint32_t *pd = eviction_thread->pagedir;
+
+    if (hand->can_be_shared) {
+      //eviction for sharing
+    } else {
+      //eviction for not
+    }
 
     if (pagedir_is_accessed (pd, hand->page)) {
       /* Set the reference bit to true because the page has been accessed */

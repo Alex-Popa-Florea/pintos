@@ -26,6 +26,13 @@ typedef struct {
   off_t ofs;                /* Offset to find a share table entry */
 
   bool r_bit;               /* Reference bit */
+
+  /* Information needed for sharing */
+  bool can_be_shared;       /* Records whether the frame is sharable */
+  supp_pte *creator;        /* Points to supp_pte that created the frame. Unused for shared frame */
+
+
+  // struct list supp_ptes;    /* List of pages that are using this frame */
 } frame_table_entry;
 
 
@@ -54,6 +61,16 @@ void init_frame_table (void);
 frame_table_entry *try_allocate_page (enum palloc_flags flags, void *entry);
 // frame_table_entry *try_allocate_page (enum palloc_flags);
 
+
+// /*
+//   Returns the supplemental page entry from the given frame table entry
+//   Assumes no sharing is taking place
+// */
+// supp_pte *
+// get_supp_pte_from_page_no_sharing (frame_table_entry *);
+
+/* Evicts page based on the clock algorithm */
+void evict (void);
 
 /*
   Sets the inode and offset members of a frame table entry
