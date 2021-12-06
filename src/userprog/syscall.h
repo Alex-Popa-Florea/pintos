@@ -136,5 +136,6 @@ mapid_t mmap (int fd, void *addr);
 */
 void munmap (mapid_t mapping);
 
+void munmap_for_thread (mapid_t, struct thread *);
 
 #endif /* userprog/syscall.h */

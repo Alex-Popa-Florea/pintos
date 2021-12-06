@@ -479,12 +479,19 @@ munmap_wrapper (int *addr) {
 
 void 
 munmap (mapid_t mapping) {
-  
+  lock_tables ();
+  munmap_for_thread (mapping, thread_current ());
+  release_tables ();
+}
+
+void
+munmap_for_thread (mapid_t mapping, struct thread *given_thread) {
+
   if (mapping < 0) {
     return;
   }
 
-  struct list *mapped_list = &thread_current ()->mmapped_file_list;
+  struct list *mapped_list = &given_thread->mmapped_file_list;
   
   if (list_empty (mapped_list)) {
     return;
@@ -499,17 +506,13 @@ munmap (mapid_t mapping) {
       supp_pte *entry = current_mapped_file->entry;
       file_seek (entry->file, 0);
 
-      if (pagedir_is_dirty (thread_current ()->pagedir, entry->addr)) {
+      if (pagedir_is_dirty (given_thread->pagedir, entry->addr)) {
         file_write_at (entry->file, entry->addr, entry->read_bytes, entry->ofs);
       }
 
-      //uint8_t *kpage = pagedir_get_page (thread_current ()->pagedir, entry->addr);
-	    //pagedir_clear_page (thread_current ()->pagedir, entry->addr);
-      lock_acquire (&frame_table_lock);
-	    free_frame_from_supp_pte (&entry->elem, NULL);
-      lock_release (&frame_table_lock);
-
-      hash_delete (&thread_current ()->supp_page_table, &entry->elem);
+      free_frame_from_supp_pte (&entry->elem, NULL);
+      
+      hash_delete (given_thread->supp_page_table, &entry->elem);
       free (entry);
       
       e = list_remove (e);

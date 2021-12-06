@@ -153,7 +153,7 @@ page_fault (struct intr_frame *f)
   /* Turn interrupts back on (they were only off so that we could
      be assured of reading CR2 before it changed). */
   intr_enable ();
-
+  //printf ("page fault at %p\n", fault_addr);
   /* Count page faults. */
   page_fault_cnt++;
 
@@ -226,7 +226,6 @@ page_fault (struct intr_frame *f)
     supp_pte *entry = hash_entry (entry_elem, supp_pte, elem);
     load_success = load_stack_page (entry);
   }
-  
   if (!load_success) {
     print_page_fault (fault_addr, not_present, write, user);
     kill (f);
@@ -249,21 +248,23 @@ print_page_fault (void *fault_addr, bool not_present, bool write, bool user)
 bool 
 load_stack_page (supp_pte *entry) {
 
+  lock_tables ();
   frame_table_entry *new_frame = try_allocate_page (PAL_USER, entry);
   uint8_t *kpage = new_frame->page;
 
   if (!kpage) {
+    release_tables ();
     return false;
   }
   
   if (!install_page (entry->addr, kpage, entry->writable)) {
-    lock_acquire (&frame_table_lock);
     free_frame_from_supp_pte (&entry->elem, NULL);
-    lock_release (&frame_table_lock);
+    release_tables ();
     return false;
   }
 
   entry->page_frame = new_frame;
+  release_tables ();
   return true;
 }
 
@@ -275,54 +276,48 @@ load_stack_page (supp_pte *entry) {
 */
 static bool
 load_page (supp_pte *entry) {
-
+  lock_tables ();
   /* Check the share table for read-only pages 
      to see if there is already an entry */
   if (!entry->writable && entry->page_source == DISK) {
-    lock_acquire (&share_table_lock);
     share_entry search_entry;
-    search_entry.key = share_key (entry);
+    search_entry.inode = file_get_inode (entry->file);
+    search_entry.ofs = entry->ofs;
     struct hash_elem *search_elem = hash_find (&share_table, &search_entry.elem);
     if (search_elem != NULL) {
       /* Page has already been allocated so it can be shared */
       share_entry *found_entry = hash_entry (search_elem, share_entry, elem);
-      printf ("i installed\n");
       install_page (entry->addr, found_entry->page, entry->writable);
-      lock_release (&share_table_lock);
+      release_tables ();
       return true;
-    } else {
-      lock_release (&share_table_lock);
     }
   }
 
   /* Get a new page of memory. */
   frame_table_entry *new_frame = try_allocate_page (PAL_USER, entry);
-  set_inode_and_ofs (new_frame, file_get_inode (entry->file), entry->ofs);
 
   uint8_t *kpage = new_frame->page;
 
   if (kpage == NULL) {
+    release_tables ();
     return false;
   }
+  
+  //set_inode_and_ofs (new_frame, file_get_inode (entry->file), entry->ofs);
 
   /* Add the page to the process's address space. */
   if (!install_page (entry->addr, kpage, entry->writable)) {
-    lock_acquire (&frame_table_lock);
     free_frame_from_supp_pte (&entry->elem, NULL);
-    lock_release (&frame_table_lock);
+    release_tables ();
     return false;
   }
 
   /* Add the frame to the share table if readable */
   if (!entry->writable && entry->page_source == DISK) {
-    //printf ("i added to share\n");
     share_entry *new_share_entry = create_share_entry (entry, kpage);
-    lock_acquire (&share_table_lock);
     hash_insert (&share_table, &new_share_entry->elem);
-    lock_release (&share_table_lock);
   }
 
-  
   bool held = false;
   held = acquire_filesys_lock (held);
 
@@ -332,15 +327,15 @@ load_page (supp_pte *entry) {
   held = release_filesys_lock (held);
 
   if (bytes_read != (off_t) entry->read_bytes) {
-    lock_acquire (&frame_table_lock);
     free_frame_from_supp_pte (&entry->elem, NULL);
-    lock_release (&frame_table_lock);
+    release_tables ();
     return false;
   }
 
   /* Set the remaining bytes of the page to 0 */
   memset (kpage + entry->read_bytes, 0, entry->zero_bytes);
   entry->page_frame = new_frame;
+  release_tables ();
   return true;
 }
 

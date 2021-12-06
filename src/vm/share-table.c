@@ -10,15 +10,6 @@ struct hash share_table;
 
 struct lock share_table_lock;
 
-int
-share_key (supp_pte *pte) {
-  struct inode *inode = file_get_inode (pte->file);
-  int k1 = (int) inode;
-  int k2 = (int) pte->ofs;
-  return ((k1 + k2) * (k1 + k2 + 1) + k2) / 2;
-}
-
-
 sharing_thread *
 create_sharing_thread (struct thread *t) {
   sharing_thread *share = (sharing_thread *) malloc (sizeof (sharing_thread));
@@ -34,7 +25,6 @@ create_share_entry (supp_pte *pte, void *page) {
       return NULL;
     }
 
-    entry->key = share_key (pte);
     entry->inode = file_get_inode (pte->file);
     entry->ofs = pte->ofs;
     entry->page = page;
@@ -62,7 +52,8 @@ init_share_table (void) {
 unsigned 
 share_hash (const struct hash_elem *e, void *aux UNUSED) {
   const share_entry *entry = hash_entry (e, share_entry, elem);
-  return hash_int (entry->key);
+
+  return hash_int ((int) entry->inode) + hash_int (entry->ofs);
 }
 
 
@@ -72,7 +63,13 @@ share_hash_compare (const struct hash_elem *a, const struct hash_elem *b, void *
   const share_entry *entryA = hash_entry (a,  share_entry, elem);
   const share_entry *entryB = hash_entry (b,  share_entry, elem);
 
-  return entryA->key < entryB->key;
+  if (entryA->inode < entryB->inode) {
+    return true;
+  } else if (entryA->inode == entryB->inode){
+    return entryA->ofs < entryB->ofs;
+  } else {
+    return false;
+  }
 }
 
 

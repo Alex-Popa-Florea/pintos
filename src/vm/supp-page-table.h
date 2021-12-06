@@ -29,6 +29,8 @@ typedef struct {
   
   frame_table_entry *page_frame;      /* Pointer to page frame if page is loaded to frame table, null otherwise */
 
+  struct thread *thread;
+
   struct hash_elem elem;              /* Hash table elem */
 } supp_pte;
 

@@ -121,7 +121,7 @@ start_process (void *args_ptr)
   bool success;
 
     /* Initialise Supplemental Page Table of process */  
-  hash_init (&thread_current ()->supp_page_table, &supp_hash, &supp_hash_compare, NULL);
+  hash_init (&thread_current ()->supp_page_table, &supp_hash, &supp_hash_compare, thread_current ());
 
   int file_size = strlen (whole_file) + 1;
 
@@ -696,6 +696,7 @@ set_up_pte_for_stack (void *upage) {
   entry->writable = true;
   entry->page_source = STACK;
   entry->is_in_swap_space = false;
+  entry->thread = &thread_current ();
   hash_insert (&thread_current ()->supp_page_table, &entry->elem);
   return &entry->elem;
 }

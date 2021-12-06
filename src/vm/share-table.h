@@ -19,12 +19,10 @@ extern struct hash share_table;
 extern struct lock share_table_lock;
 
 
-
 /*
   Struct for an entry in the share table
 */
 typedef struct {
-  int key;                      /* Key for hash table */
   struct inode *inode;          /* File's inode, used to uniquely identify a file */
   off_t ofs;                    /* Offset in the file for current page */ 
   void *page;                   /* Pointer to page storing its data if allocated, NULL otherwise */
@@ -41,16 +39,6 @@ typedef struct {
   struct thread *thread;      /* Pointer to the thread */
   struct list_elem elem;      /* Elem to insert into a list */
 } sharing_thread;
-
-
-
-/*
-  Use the Cantor Pairing Function to create a bijection from the pair
-  of struct inode * and ofs to integers, for a unique key in the share table
-    These are stored in a supplemental page table entry 
-*/
-int share_key (supp_pte *);
-
 
 
 sharing_thread *create_sharing_thread (struct thread *);

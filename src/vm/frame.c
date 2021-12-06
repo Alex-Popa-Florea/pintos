@@ -43,62 +43,127 @@ try_allocate_page (enum palloc_flags flags, void *entry_ptr) {
 
   if (page) {
     /* Successful allocation of frame */
-    frame_table_entry *new_frame = (frame_table_entry *) malloc (sizeof (frame_table_entry));
+    frame_table_entry *new_frame = (frame_table_entry *) malloc (sizeof (frame_table_entry)); // check for malloc
+    if (new_frame == NULL) {
+      return NULL;
+    }
     new_frame->page = page;
-    new_frame->inode = NULL;
-    new_frame->ofs = NULL;
     new_frame->r_bit = false;
+    new_frame->inode = file_get_inode (entry->file);
+    new_frame->ofs = entry->ofs;
 
-    lock_acquire (&frame_table_lock);
     list_push_back (&frame_table, &new_frame->elem);
-    lock_release (&frame_table_lock);
+    
     return new_frame;
-  } 
-  return NULL;
+  } else {
+    /* No frame is free, eviction required */
+    evict ();
+    return try_allocate_page (flags, entry_ptr);
+  }
 }
 
 
-void set_inode_and_ofs (frame_table_entry *entry, struct inode *inode, off_t ofs) {
-  entry->inode = inode;
-  entry->ofs = ofs;
+// void set_inode_and_ofs (frame_table_entry *entry, struct inode *inode, off_t ofs) {
+//   entry->inode = inode;
+//   entry->ofs = ofs;
+// }
+
+void *
+get_supp_pte_from_page (frame_table_entry *hand) {
+  
+}
+
+
+void
+evict (void) {
+  /* Exit loop once a page has been evicted */
+  bool evicted = false;
+  while (!evicted) {
+    // Hand points to the current frame table entry
+    current_entry_elem = next_frame_table_elem (current_entry_elem);
+    frame_table_entry *hand = list_entry (current_entry_elem, frame_table_entry, elem);
+    supp_pte *to_be_evicted_entry = (supp_pte *) get_supp_pte_from_page (hand);
+    struct thread *eviction_thread = to_be_evicted_entry->thread;
+    uint32_t *pd = eviction_thread->pagedir;
+
+    if (pagedir_is_accessed (pd, hand->page)) {
+      /* Set the reference bit to true because the page has been accessed */
+      hand->r_bit = true;
+      pagedir_set_accessed (pd, hand->page, false);
+    } else {
+      //printf ("evicting %p\n", hand->page);
+      if (hand->r_bit == false) {
+
+        /* Evict the first page without a set reference bit */
+        if (to_be_evicted_entry->page_source == MMAP) {
+          /* Unmap memory-mapped files */
+          struct list *file_list = eviction_thread->mmapped_file_list;
+          struct list_elem *e;
+
+          for (e = list_begin (file_list); e != list_end (file_list); e = list_next (e)) {
+            mapped_file *map_entry = list_entry (e, mapped_file, mapped_elem);
+            if (map_entry->entry->page_frame->page == hand->page) { 
+              munmap_for_thread (map_entry->mapping, eviction_thread);
+            }
+          }
+        } else {
+          if (to_be_evicted_entry->page_source == STACK || pagedir_is_dirty (pd, hand->page)) {
+            /* Stack pages and dirty pages are written to swap space */
+            to_be_evicted_entry->is_in_swap_space = true;
+            load_page_into_swap_space (hand->page);
+          }
+          
+          /* Remove the evicted page from the frame table */
+        
+          free_frame_from_supp_pte (to_be_evicted_entry, eviction_thread);
+        }
+
+        evicted = true;
+      } else {
+        hand->r_bit = false;
+        
+      }
+    }
+  }
 }
 
 void
 free_frame_table_entries_of_thread (struct thread *t) {
-  lock_acquire (&frame_table_lock);
+  lock_tables ();
   struct hash supp_table = t->supp_page_table;
   hash_apply (&supp_table, &free_frame_from_supp_pte);
-  lock_release (&frame_table_lock);
+  release_tables ();
 }
 
 
 void 
-free_frame_from_supp_pte (struct hash_elem *e, void *aux UNUSED) {
-  lock_acquire (&share_table_lock);
+free_frame_from_supp_pte (struct hash_elem *e, void *aux) {
+  struct thread *t = (struct thread *) aux;
   supp_pte *entry = hash_entry (e, supp_pte, elem);
-  pagedir_clear_page (thread_current ()->pagedir, entry->addr);
+  pagedir_clear_page (t->pagedir, entry->addr);
 
   frame_table_entry *f = entry->page_frame;
   if (f != NULL) {
 
     share_entry search_entry;
-    search_entry.key = share_key (entry);
+    search_entry.inode = file_get_inode (entry->file);
+    search_entry.ofs = entry->ofs;
     struct hash_elem *search_elem = hash_find (&share_table, &search_entry.elem);
 
     if (search_elem != NULL) {
-      printf ("share elem: %p\n", search_elem);
+      //printf ("share elem: %p\n", search_elem);
 
       share_entry *found_share_entry = hash_entry (search_elem, share_entry, elem);
       struct list_elem *element;
       for (element = list_begin (&found_share_entry->sharing_threads); element != list_end (&found_share_entry->sharing_threads); element = list_next (element)) {
         sharing_thread *current_thread = list_entry (element, sharing_thread, elem);
-        if (current_thread->thread->tid == thread_current ()->tid) {
+        if (current_thread->thread->tid == t->tid) {
           list_remove (&current_thread->elem);
           break;
         }
       }
 
-      if (list_size (&found_share_entry->sharing_threads) <= 1) {
+      if (list_empty (&found_share_entry->sharing_threads)) {
 
         list_remove (&f->elem);
         entry->page_frame = NULL;
@@ -115,10 +180,7 @@ free_frame_from_supp_pte (struct hash_elem *e, void *aux UNUSED) {
       
     }
     
-
   }
-  lock_release (&share_table_lock);
-
 }
 
 
@@ -149,3 +211,15 @@ remove_frame_table_elem (struct list_elem *e) {
   return next;
 }
 
+
+void
+lock_tables (void) {
+  lock_acquire (&frame_table_lock);
+  lock_acquire (&share_table_lock);
+}
+
+void
+release_tables (void) {
+  lock_release (&share_table_lock);
+  lock_release (&frame_table_lock);
+}

@@ -21,8 +21,10 @@ typedef int frame_nr;
 typedef struct {
   void *page;               /* The page where data is stored */                
   struct list_elem elem;    /* Elem to insert into frame table */
+
   struct inode *inode;      /* Inode to find a share table entry */
   off_t ofs;                /* Offset to find a share table entry */
+
   bool r_bit;               /* Reference bit */
 } frame_table_entry;
 
@@ -56,7 +58,7 @@ frame_table_entry *try_allocate_page (enum palloc_flags flags, void *entry);
 /*
   Sets the inode and offset members of a frame table entry
 */
-void set_inode_and_ofs (frame_table_entry *, struct inode *, off_t);
+//void set_inode_and_ofs (frame_table_entry *, struct inode *, off_t);
 
 
 // /*
@@ -73,6 +75,11 @@ void free_frame_table_entries_of_thread (struct thread *);
   Frees the given page in a thread's supplemental page table 
   and its corresponding frame table entry
 */
-void free_frame_from_supp_pte (struct hash_elem *, void * UNUSED);
+void free_frame_from_supp_pte (struct hash_elem *, void *);
+
+
+void lock_tables (void);
+
+void release_tables (void);
 
 #endif 
