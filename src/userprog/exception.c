@@ -257,8 +257,9 @@ load_stack_page (supp_pte *entry) {
   }
   
   if (!install_page (entry->addr, kpage, entry->writable)) {
+    lock_acquire (&frame_table_lock);
     free_frame_from_supp_pte (&entry->elem, NULL);
-    palloc_free_page (kpage);
+    lock_release (&frame_table_lock);
     return false;
   }
 
@@ -285,6 +286,7 @@ load_page (supp_pte *entry) {
     if (search_elem != NULL) {
       /* Page has already been allocated so it can be shared */
       share_entry *found_entry = hash_entry (search_elem, share_entry, elem);
+      printf ("i installed\n");
       install_page (entry->addr, found_entry->page, entry->writable);
       lock_release (&share_table_lock);
       return true;
@@ -307,13 +309,13 @@ load_page (supp_pte *entry) {
   if (!install_page (entry->addr, kpage, entry->writable)) {
     lock_acquire (&frame_table_lock);
     free_frame_from_supp_pte (&entry->elem, NULL);
-    palloc_free_page (kpage);
     lock_release (&frame_table_lock);
     return false;
   }
 
   /* Add the frame to the share table if readable */
   if (!entry->writable && entry->page_source == DISK) {
+    //printf ("i added to share\n");
     share_entry *new_share_entry = create_share_entry (entry, kpage);
     lock_acquire (&share_table_lock);
     hash_insert (&share_table, &new_share_entry->elem);
@@ -332,7 +334,6 @@ load_page (supp_pte *entry) {
   if (bytes_read != (off_t) entry->read_bytes) {
     lock_acquire (&frame_table_lock);
     free_frame_from_supp_pte (&entry->elem, NULL);
-    palloc_free_page (kpage);
     lock_release (&frame_table_lock);
     return false;
   }

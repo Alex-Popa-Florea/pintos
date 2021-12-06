@@ -503,10 +503,11 @@ munmap (mapid_t mapping) {
         file_write_at (entry->file, entry->addr, entry->read_bytes, entry->ofs);
       }
 
-      uint8_t *kpage = pagedir_get_page (thread_current ()->pagedir, entry->addr);
-	    pagedir_clear_page (thread_current ()->pagedir, entry->addr);
-
+      //uint8_t *kpage = pagedir_get_page (thread_current ()->pagedir, entry->addr);
+	    //pagedir_clear_page (thread_current ()->pagedir, entry->addr);
+      lock_acquire (&frame_table_lock);
 	    free_frame_from_supp_pte (&entry->elem, NULL);
+      lock_release (&frame_table_lock);
 
       hash_delete (&thread_current ()->supp_page_table, &entry->elem);
       free (entry);

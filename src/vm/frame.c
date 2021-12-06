@@ -10,6 +10,7 @@
 #include "vm/swap.h"
 #include "userprog/pagedir.h"
 #include <stdio.h>
+#include "share-table.h"
 
 /* Global Frame Table */
 struct list frame_table;
@@ -62,34 +63,6 @@ void set_inode_and_ofs (frame_table_entry *entry, struct inode *inode, off_t ofs
   entry->ofs = ofs;
 }
 
-// /*
-//   Frees the memory occupied by a frame table entry
-// */
-// static void
-// free_frame_table_entry (frame_table_entry *frame_table_entry) {
-//   lock_acquire (&frame_table_lock);
-//   list_remove (&frame_table_entry->elem);
-//   lock_release (&frame_table_lock);
-//   free (frame_table_entry);
-// }
-
-// void
-// free_frame_table_entry_from_page (void* page) {
-//   lock_acquire (&frame_table_lock);
-//   struct list_elem *e;
-//   for (e = list_begin (&frame_table); e != list_end (&frame_table);) {
-//     frame_table_entry *f = list_entry (e, frame_table_entry, elem);
-//     if (f->page == page) {
-//       e = list_remove (&f->elem);
-//       free (f);
-//       return;
-//     } else {
-//       e = list_next (e);
-//     }
-//   }
-//   lock_release (&frame_table_lock);
-// }
-
 void
 free_frame_table_entries_of_thread (struct thread *t) {
   lock_acquire (&frame_table_lock);
@@ -101,21 +74,51 @@ free_frame_table_entries_of_thread (struct thread *t) {
 
 void 
 free_frame_from_supp_pte (struct hash_elem *e, void *aux UNUSED) {
+  lock_acquire (&share_table_lock);
   supp_pte *entry = hash_entry (e, supp_pte, elem);
+  pagedir_clear_page (thread_current ()->pagedir, entry->addr);
+
   frame_table_entry *f = entry->page_frame;
   if (f != NULL) {
-    if (&f->elem == current_entry_elem) {
-      current_entry_elem = next_frame_table_elem (current_entry_elem);
+
+    share_entry search_entry;
+    search_entry.key = share_key (entry);
+    struct hash_elem *search_elem = hash_find (&share_table, &search_entry.elem);
+
+    if (search_elem != NULL) {
+      printf ("share elem: %p\n", search_elem);
+
+      share_entry *found_share_entry = hash_entry (search_elem, share_entry, elem);
+      struct list_elem *element;
+      for (element = list_begin (&found_share_entry->sharing_threads); element != list_end (&found_share_entry->sharing_threads); element = list_next (element)) {
+        sharing_thread *current_thread = list_entry (element, sharing_thread, elem);
+        if (current_thread->thread->tid == thread_current ()->tid) {
+          list_remove (&current_thread->elem);
+          break;
+        }
+      }
+
+      if (list_size (&found_share_entry->sharing_threads) <= 1) {
+
+        list_remove (&f->elem);
+        entry->page_frame = NULL;
+        palloc_free_page (f->page);
+        free (f);
+        
+      }
+    } else {
+
+      list_remove (&f->elem);
+      entry->page_frame = NULL;
+      palloc_free_page (f->page);
+      free (f);
+      
     }
+    
 
-    list_remove (&f->elem);
-    pagedir_clear_page (thread_current ()->pagedir, entry->addr);
-    entry->page_frame = NULL;
-    palloc_free_page (f->page);
-    free (f);
   }
+  lock_release (&share_table_lock);
 
-  entry->page_frame = NULL;
 }
 
 

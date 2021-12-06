@@ -13,8 +13,8 @@ struct lock share_table_lock;
 int
 share_key (supp_pte *pte) {
   struct inode *inode = file_get_inode (pte->file);
-  int k1 = inode;
-  int k2 = pte->ofs;
+  int k1 = (int) inode;
+  int k2 = (int) pte->ofs;
   return ((k1 + k2) * (k1 + k2 + 1) + k2) / 2;
 }
 
