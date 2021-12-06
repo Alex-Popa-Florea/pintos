@@ -294,7 +294,7 @@ load_page (supp_pte *entry) {
 
       // Add to list of pages in frame
       entry->page_frame = found_entry->frame;
-      list_push_back (&found_entry->sharing_pages, &entry->share_elem);
+      list_push_back (&found_entry->sharing_ptes, &entry->share_elem);
 
 
       install_page (entry->addr, found_entry->page, entry->writable);

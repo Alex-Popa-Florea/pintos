@@ -129,12 +129,12 @@ evict (void) {
       struct hash_elem *search_elem = hash_find (&share_table, &hand->elem);
       if (search_elem != NULL) {
         share_entry *found_entry = hash_entry (search_elem, share_entry, elem);
-        if (!check_page_access_bit (&found_entry->sharing_pages, hand)) {
+        if (!check_page_access_bit (&found_entry->sharing_ptes, hand)) {
 
           if (hand->r_bit == false) {
 
             /* Evict the first page without a set reference bit */
-            evict_sharing_entries (&found_entry->sharing_pages);
+            evict_sharing_entries (&found_entry->sharing_ptes);
             
             evicted = true;
           } else {
@@ -223,7 +223,7 @@ free_frame_from_supp_pte (struct hash_elem *e, void *aux) {
 
       share_entry *found_share_entry = hash_entry (search_elem, share_entry, elem);
       struct list_elem *element;
-      for (element = list_begin (&found_share_entry->sharing_pages); element != list_end (&found_share_entry->sharing_pages); element = list_next (element)) {
+      for (element = list_begin (&found_share_entry->sharing_ptes); element != list_end (&found_share_entry->sharing_ptes); element = list_next (element)) {
         supp_pte *current_supp_pte = list_entry (element, supp_pte, share_elem);
         if (current_supp_pte->thread->tid == t->tid) {
           list_remove (&current_supp_pte->share_elem);
@@ -231,7 +231,7 @@ free_frame_from_supp_pte (struct hash_elem *e, void *aux) {
         }
       }
 
-      if (list_empty (&found_share_entry->sharing_pages)) {
+      if (list_empty (&found_share_entry->sharing_ptes)) {
 
         list_remove (&f->elem);
         entry->page_frame = NULL;
