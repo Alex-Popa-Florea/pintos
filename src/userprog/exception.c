@@ -153,7 +153,6 @@ page_fault (struct intr_frame *f)
   /* Turn interrupts back on (they were only off so that we could
      be assured of reading CR2 before it changed). */
   intr_enable ();
-  //printf ("page fault at %p\n", fault_addr);
   /* Count page faults. */
   page_fault_cnt++;
 
@@ -216,10 +215,9 @@ page_fault (struct intr_frame *f)
   /* Checks the fault address is above the stack pointer, equal to the stack
      pointer - 32 or equal to the stack pointer - 4
   */ 
-  bool valid_fault_address = (uint32_t*) fault_addr >= f->esp
-                              || (uint32_t*) fault_addr == f->esp - 32
-                              || (uint32_t*) fault_addr == f->esp - 4;
-
+  bool valid_fault_address = (uint32_t*) fault_addr >= (uint32_t *) f->esp
+                              || (uint32_t*) fault_addr == (uint32_t *) (f->esp - 32)
+                              || (uint32_t*) fault_addr == (uint32_t *) (f->esp - 4);
 
   if (!load_success && not_overflow && valid_fault_address && is_user_vaddr (fault_addr)) {
     struct hash_elem *entry_elem = set_up_pte_for_stack (fault_addr);
@@ -297,7 +295,7 @@ load_page (supp_pte *entry) {
       list_push_back (&found_entry->sharing_ptes, &entry->share_elem);
 
 
-      install_page (entry->addr, found_entry->page, entry->writable);
+      install_page (entry->addr, found_entry->frame->page, entry->writable);
       release_tables ();
       return true;
     }
@@ -313,8 +311,6 @@ load_page (supp_pte *entry) {
     return false;
   }
   
-  //set_inode_and_ofs (new_frame, file_get_inode (entry->file), entry->ofs);
-
   /* Add the page to the process's address space. */
   if (!install_page (entry->addr, kpage, entry->writable)) {
     free_frame_from_supp_pte (&entry->elem, NULL);
@@ -324,7 +320,7 @@ load_page (supp_pte *entry) {
 
   /* Add the frame to the share table if readable */
   if (!entry->writable && entry->page_source == DISK) {
-    share_entry *new_share_entry = create_share_entry (entry, kpage);
+    share_entry *new_share_entry = create_share_entry (entry, new_frame);
     hash_insert (&share_table, &new_share_entry->elem);
   }
 

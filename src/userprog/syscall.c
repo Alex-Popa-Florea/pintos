@@ -18,9 +18,6 @@
 #include "lib/user/syscall.h"
 #include "vm/frame.h"
 
-/* List of all pcbs as defined in process.c */
-//extern struct list pcb_list;
-
 /* Lock that ensures only one process can access file system at once */
 struct lock file_system_lock; 
 
@@ -513,7 +510,7 @@ munmap_for_thread (mapid_t mapping, struct thread *given_thread) {
 
       free_frame_from_supp_pte (&entry->elem, NULL);
       
-      hash_delete (given_thread->supp_page_table, &entry->elem);
+      hash_delete (&given_thread->supp_page_table, &entry->elem);
       free (entry);
       
       e = list_remove (e);

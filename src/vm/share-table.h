@@ -55,5 +55,4 @@ unsigned share_hash (const struct hash_elem *, void *);
 */
 bool share_hash_compare (const struct hash_elem *, const struct hash_elem *, void *);
 
-
 #endif
