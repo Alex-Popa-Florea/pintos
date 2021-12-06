@@ -70,7 +70,7 @@ try_allocate_page (enum palloc_flags flags, void *entry_ptr) {
 
 void *
 get_supp_pte_from_page (frame_table_entry *hand) {
-  
+
 }
 
 
