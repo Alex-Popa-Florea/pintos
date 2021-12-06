@@ -59,6 +59,8 @@ try_allocate_page (enum palloc_flags flags, void *entry_ptr) {
 
 
 void set_inode_and_ofs (frame_table_entry *entry, struct inode *inode, off_t ofs) {
+  ASSERT (inode != NULL);
+  // ASSERT (entry != NULL);
   entry->inode = inode;
   entry->ofs = ofs;
 }

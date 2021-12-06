@@ -286,7 +286,6 @@ load_page (supp_pte *entry) {
     if (search_elem != NULL) {
       /* Page has already been allocated so it can be shared */
       share_entry *found_entry = hash_entry (search_elem, share_entry, elem);
-      printf ("i installed\n");
       install_page (entry->addr, found_entry->page, entry->writable);
       lock_release (&share_table_lock);
       return true;
