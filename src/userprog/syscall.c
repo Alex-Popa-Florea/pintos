@@ -452,6 +452,7 @@ mmap (int fd, void *addr) {
     }
 
     supp_pte *entry = create_supp_pte (reopened_file, ofs, addr, page_read_bytes, page_zero_bytes, true, MMAP);
+    ASSERT (entry);
     hash_insert (&thread_current ()->supp_page_table, &entry->elem);
 
     new_mapped_file->entry = entry;

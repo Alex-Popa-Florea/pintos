@@ -28,6 +28,9 @@ create_supp_pte (struct file *file, off_t ofs, uint8_t *upage,
                  uint32_t read_bytes, uint32_t zero_bytes, bool writable, enum source source) 
 {
   supp_pte *entry = (supp_pte *) malloc (sizeof (supp_pte));
+  if (!entry) {
+    return NULL;
+  }
   entry->addr = upage;
   entry->file = file;
   entry->ofs = ofs;
