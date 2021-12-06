@@ -19,59 +19,23 @@ extern struct hash share_table;
 extern struct lock share_table_lock;
 
 
-// /*
-//   Struct for an entry in the share table
-// */
-// typedef struct {
-//   struct inode *inode;          /* File's inode, used to uniquely identify a file */
-//   off_t ofs;                    /* Offset in the file for current page */ 
-//   void *page;                   /* Pointer to page storing its data if allocated, NULL otherwise */
-//   struct list sharing_threads;  /* List of all the threads sharing a frame */
-//   struct hash_elem elem;        /* Hash table elem */
-// } share_entry;
-
 /*
   Struct for an entry in the share table
 */
 typedef struct {
   frame_table_entry *frame;        /* Frame of memory being shared */
-  struct list sharing_pages;       /* List of supplemental page table entries that share the frame */
+  struct list sharing_ptes;        /* List of supplemental page table entries that share the frame */
   struct hash_elem elem;           /* Hash table elem */
 } share_entry;
 
 
 
 /*
-  Wrapper struct so that a thread can be put in the sharing list of multiple frames
-*/
-typedef struct {
-  struct thread *thread;      /* Pointer to the thread */
-  struct list_elem elem;      /* Elem to insert into a list */
-} sharing_thread;
-
-
-sharing_thread *create_sharing_thread (struct thread *);
-
-
-/*
   Creates a share table entry from a supplemental page table entry
   and frame table entry.
-  Calculates the key from the file's inode and offset (stored in the frame)
   Returns the pointer if memory allocation is successful, otherwise NULL
 */
 share_entry *create_share_entry (supp_pte *, frame_table_entry *);
-// /*
-//   Creates a share table entry from a supplemental page table entry
-//   Calculates the key from the file's inode and offset
-//   Returns the pointer if memory allocation is successful, otherwise NULL
-// */
-// share_entry *create_share_entry (supp_pte *, void *);
-
-
-// /*
-//   Sets the page of a share entry
-// */
-// void set_share_entry_page (share_entry *, void *);
 
 
 /*
@@ -91,11 +55,5 @@ unsigned share_hash (const struct hash_elem *, void *);
 */
 bool share_hash_compare (const struct hash_elem *, const struct hash_elem *, void *);
 
-
-// /* 
-//   Used within hash_destroy to free elements of the Share Table
-//   Empties the list of sharing threads
-// */
-// void share_destroy (struct hash_elem *, void *);
 
 #endif
