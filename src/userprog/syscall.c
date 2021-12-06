@@ -508,7 +508,7 @@ munmap_for_thread (mapid_t mapping, struct thread *given_thread) {
         file_write_at (entry->file, entry->addr, entry->read_bytes, entry->ofs);
       }
 
-      free_frame_from_supp_pte (&entry->elem, NULL);
+      free_frame_from_supp_pte (&entry->elem, given_thread);
       
       hash_delete (&given_thread->supp_page_table, &entry->elem);
       free (entry);
