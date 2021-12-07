@@ -24,6 +24,7 @@ struct list_elem *current_entry_elem;
 
 static bool check_page_access_bit (struct list *, frame_table_entry *);
 static struct list_elem *next_frame_table_elem (struct list_elem *e);
+static struct list_elem *prev_frame_table_elem (struct list_elem *e);
 
 static struct list_elem *remove_frame_table_elem (struct list_elem *e);
 
@@ -36,19 +37,21 @@ init_frame_table (void) {
 
 static frame_table_entry *
 create_frame (void *page, supp_pte *entry) {
-  frame_table_entry *new_frame = (frame_table_entry *) malloc (sizeof (frame_table_entry)); // check for malloc
-    if (new_frame == NULL) {
-      return NULL;
-    }
-    new_frame->creator = entry;
-    new_frame->page = page;
-    new_frame->r_bit = false;
-    new_frame->inode = file_get_inode (entry->file);
-    new_frame->ofs = entry->ofs;
-    new_frame->can_be_shared = !(entry->writable) && (entry->page_source == DISK);
+  frame_table_entry *new_frame = (frame_table_entry *) malloc (sizeof (frame_table_entry));
+  if (new_frame == NULL) {
+    return NULL;
+  }
+  
+  new_frame->creator = entry;
+  new_frame->page = page;
+  new_frame->r_bit = false;
+  new_frame->inode = file_get_inode (entry->file);
+  new_frame->ofs = entry->ofs;
+  new_frame->can_be_shared = !(entry->writable) && (entry->page_source == DISK);
+  entry->page_frame = new_frame;
 
-    list_push_back (&frame_table, &new_frame->elem);
-    return new_frame;
+  list_push_back (&frame_table, &new_frame->elem);
+  return new_frame;
 }
 
 frame_table_entry *
@@ -62,7 +65,9 @@ try_allocate_page (enum palloc_flags flags, void *entry_ptr) {
   } else {
     /* No frame is free, eviction required */
     evict ();
-    return try_allocate_page (flags, entry_ptr);
+    page = palloc_get_page (flags);
+    ASSERT (page != NULL);
+    return create_frame (page, entry);
   }
 }
 
@@ -101,7 +106,7 @@ evict_sharing_entries (share_entry *found_share_entry, frame_table_entry *f) {
   }
 
   if (&f->elem == current_entry_elem) {
-    current_entry_elem = next_frame_table_elem (current_entry_elem);
+    current_entry_elem = prev_frame_table_elem (current_entry_elem);
   }
 
   list_remove (&f->elem);
@@ -115,6 +120,7 @@ evict_sharing_entries (share_entry *found_share_entry, frame_table_entry *f) {
 /* Evicts page based on the clock algorithm */
 void
 evict (void) {
+  //printf ("EVICTION!\n");
   /* Exit loop once a page has been evicted */
   bool evicted = false;
   frame_table_entry *hand;
@@ -135,6 +141,7 @@ evict (void) {
 
             /* Evict the first page without a set reference bit */
             evict_sharing_entries (found_entry, hand);
+            //printf ("eviction at 141\n");
             
             evicted = true;
           } else {
@@ -165,6 +172,7 @@ evict (void) {
               mapped_file *map_entry = list_entry (e, mapped_file, mapped_elem);
               if (map_entry->entry->page_frame->page == hand->page) { 
                 munmap_for_thread (map_entry->mapping, eviction_thread);
+                //printf ("eviction at 172\n");
               }
             }
           } else {
@@ -172,9 +180,11 @@ evict (void) {
               /* Stack pages and dirty pages are written to swap space */
               to_be_evicted_entry->is_in_swap_space = true;
               load_page_into_swap_space (to_be_evicted_entry->addr, hand->page);
+              //printf ("swap involced\n");
             }
             /* Remove the evicted page from the frame table */
             free_frame_from_supp_pte (&to_be_evicted_entry->elem, eviction_thread);
+            //printf ("eviction at 184\n");
           }
 
           evicted = true;
@@ -204,6 +214,8 @@ free_frame_from_supp_pte (struct hash_elem *e, void *aux) {
   pagedir_clear_page (t->pagedir, entry->addr);
 
   frame_table_entry *f = entry->page_frame;
+  //printf ("creator is: %p\n", entry->addr);
+  //printf ("frame is: %p\n", f);
   if (f != NULL) {
     if (f->can_be_shared) {
 
@@ -217,7 +229,7 @@ free_frame_from_supp_pte (struct hash_elem *e, void *aux) {
 
       if (list_empty (&found_share_entry->sharing_ptes)) {
         if (&f->elem == current_entry_elem) {
-          current_entry_elem = next_frame_table_elem (current_entry_elem);
+          current_entry_elem = prev_frame_table_elem (current_entry_elem);
         }
         list_remove (&f->elem);
         entry->page_frame = NULL;
@@ -228,7 +240,7 @@ free_frame_from_supp_pte (struct hash_elem *e, void *aux) {
       }
     } else {
       if (&f->elem == current_entry_elem) {
-        current_entry_elem = next_frame_table_elem (current_entry_elem);
+        current_entry_elem = prev_frame_table_elem (current_entry_elem);
       }
       list_remove (&f->elem);
       entry->page_frame = NULL;
@@ -253,6 +265,14 @@ next_frame_table_elem (struct list_elem *e) {
   return next;
 }
 
+/*
+  Returns the prev element for a frame table entry
+*/
+static struct list_elem *
+prev_frame_table_elem (struct list_elem *e) {
+  struct list_elem *prev = list_prev (e);
+  return prev;
+}
 
 /*
   Removes an element for a frame table entry and returns the next one, 
