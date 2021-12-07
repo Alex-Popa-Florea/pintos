@@ -76,8 +76,20 @@ void free_frame_table_entries_of_thread (struct thread *);
 */
 void free_frame_from_supp_pte (struct hash_elem *, void *);
 
+/*  
+  Frame table and share table lock needs to be acquired and released at the same time
+
+  The following functions are used to enforce this.
+*/
+
+/*
+  Acquires the frame table and share table lock
+*/
 void lock_tables (void);
 
+/*
+  Releases the frame table and share table lock
+*/
 void release_tables (void);
 
 #endif 
