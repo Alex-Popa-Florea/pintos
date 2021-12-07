@@ -256,7 +256,7 @@ load_stack_page (supp_pte *entry) {
   }
   
   if (!install_page (entry->addr, kpage, entry->writable)) {
-    free_frame_from_supp_pte (&entry->elem, NULL);
+    free_frame_from_supp_pte (&entry->elem, thread_current ());
     release_tables ();
     return false;
   }
@@ -313,7 +313,7 @@ load_page (supp_pte *entry) {
   
   /* Add the page to the process's address space. */
   if (!install_page (entry->addr, kpage, entry->writable)) {
-    free_frame_from_supp_pte (&entry->elem, NULL);
+    free_frame_from_supp_pte (&entry->elem, thread_current ());
     release_tables ();
     return false;
   }
@@ -333,7 +333,7 @@ load_page (supp_pte *entry) {
   held = release_filesys_lock (held);
 
   if (bytes_read != (off_t) entry->read_bytes) {
-    free_frame_from_supp_pte (&entry->elem, NULL);
+    free_frame_from_supp_pte (&entry->elem, thread_current ());
     release_tables ();
     return false;
   }
@@ -362,7 +362,7 @@ load_mmap_page (supp_pte *entry) {
   /* Add the page to the process's address space. */
   if (!install_page (entry->addr, kpage, entry->writable)) {
     lock_acquire (&frame_table_lock);
-    free_frame_from_supp_pte (&entry->elem, NULL);
+    free_frame_from_supp_pte (&entry->elem, thread_current ());
     lock_release (&frame_table_lock);
     return false; 
   }
@@ -378,7 +378,7 @@ load_mmap_page (supp_pte *entry) {
 
   if (bytes_read != (off_t) entry->read_bytes) {
     lock_acquire (&frame_table_lock);
-    free_frame_from_supp_pte (&entry->elem, NULL);
+    free_frame_from_supp_pte (&entry->elem, thread_current ());
     lock_release (&frame_table_lock);
     return false; 
   }
@@ -403,7 +403,7 @@ load_swap_space_page (supp_pte *entry) {
   /* Add the page to the process's address space. */
   if (!install_page (entry->addr, kpage, entry->writable)) {
     lock_acquire (&frame_table_lock);
-    free_frame_from_supp_pte (&entry->elem, NULL);
+    free_frame_from_supp_pte (&entry->elem, thread_current ());
     lock_release (&frame_table_lock);
     return false; 
   }
