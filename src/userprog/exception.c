@@ -436,6 +436,7 @@ load_swap_space_page (supp_pte *entry) {
 
   retrieve_from_swap_space (entry->addr, kpage);
   entry->is_in_swap_space = false;
+  entry->page_frame = new_frame;
   release_tables ();
   return true;
 }
