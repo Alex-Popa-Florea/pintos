@@ -327,7 +327,14 @@ load_page (supp_pte *entry) {
   }
 
   /* Get a new page of memory. */
-  frame_table_entry *new_frame = try_allocate_page (PAL_USER, entry);
+  frame_table_entry *new_frame;
+
+  if (entry->page_source == MMAP) {
+    new_frame = try_allocate_page (PAL_USER | PAL_ZERO, entry);
+  } else {
+    new_frame = try_allocate_page (PAL_USER, entry);
+  }
+
 
   uint8_t *kpage = new_frame->page;
 

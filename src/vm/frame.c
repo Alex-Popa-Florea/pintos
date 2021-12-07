@@ -161,14 +161,30 @@ evict (void) {
 
           /* Evict the first page without a set reference bit */
           if (to_be_evicted_entry->page_source == MMAP) {
-            /* Unmap memory-mapped files */
-            struct list *file_list = &eviction_thread->mmapped_file_list;
+            
+            struct list *mapped_list = &eviction_thread->mmapped_file_list;
             struct list_elem *e;
 
-            for (e = list_begin (file_list); e != list_end (file_list); e = list_next (e)) {
+            for (e = list_begin (mapped_list); e != list_end (mapped_list); e = list_next (e)) {
               mapped_file *map_entry = list_entry (e, mapped_file, mapped_elem);
               if (map_entry->entry->page_frame->page == hand->page) { 
-                munmap_for_thread (map_entry->mapping, eviction_thread);
+
+                lock_acquire (&file_system_lock);
+                
+                if (pagedir_is_dirty (eviction_thread->pagedir, to_be_evicted_entry->addr)) {
+                  file_write_at (to_be_evicted_entry->file, to_be_evicted_entry->page_frame->page, to_be_evicted_entry->read_bytes, to_be_evicted_entry->ofs);
+                }
+
+                free_frame_from_supp_pte (&to_be_evicted_entry->elem, eviction_thread);
+                    
+                hash_delete (&eviction_thread->supp_page_table, &to_be_evicted_entry->elem);
+                free (to_be_evicted_entry);
+                    
+                list_remove (e);
+                free (map_entry);
+                
+                lock_release (&file_system_lock);
+                break;
               }
             }
           } else {

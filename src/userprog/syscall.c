@@ -502,10 +502,8 @@ munmap_for_thread (mapid_t mapping, struct thread *given_thread) {
     mapped_file *current_mapped_file = list_entry (e, mapped_file, mapped_elem);
     if (current_mapped_file->mapping == mapping) {
       supp_pte *entry = current_mapped_file->entry;
-      file_seek (entry->file, 0);
-
       if (pagedir_is_dirty (given_thread->pagedir, entry->addr)) {
-        file_write_at (entry->file, entry->addr, entry->read_bytes, entry->ofs);
+        file_write_at (entry->file, entry->page_frame->page, entry->read_bytes, entry->ofs);
       }
 
       free_frame_from_supp_pte (&entry->elem, given_thread);
