@@ -79,33 +79,58 @@ check_page_access_bit (struct list *entries, frame_table_entry *hand) {
     struct thread *sharing_thread = entry->thread;
     uint32_t *pd = sharing_thread->pagedir;
 
-    if (pagedir_is_accessed (pd, hand->page)) {
+    if (pagedir_is_accessed (pd, entry->addr)) {
       /* Set the reference bit to true because the page has been accessed */
       hand->r_bit = true;
       is_accessed = true;
-      pagedir_set_accessed (pd, hand->page, false);
+      pagedir_set_accessed (pd, entry->addr, false);
     }
   }
 
   return is_accessed;
 }
 
+void
+print_sharing (struct hash *h) {
+  printf ("SHARE TABLE: \n");
+  struct hash_iterator i;
+
+  hash_first (&i, h);
+  while (hash_next (&i))
+  {
+    share_entry *entry = hash_entry (hash_cur (&i), share_entry, elem);
+    printf ("-frame: %p\n", entry->frame->page);
+    struct list_elem *e;
+    int i = 0;
+    for (e = list_begin (&entry->sharing_ptes); e != list_end (&entry->sharing_ptes); e = list_next (e)) {
+      supp_pte *sup = list_entry (e, supp_pte, share_elem);
+      printf ("---sup %d addr: %p\n", i, sup->addr);
+      i++;
+    }
+  }
+}
+
 static void 
 evict_sharing_entries (share_entry *found_share_entry, frame_table_entry *f) {
 
-  struct list entries = found_share_entry->sharing_ptes;
+  //print_sharing(&share_table);
+
+  struct list *entries = &found_share_entry->sharing_ptes;
 
   struct list_elem *e;
-
-  for (e = list_begin (&entries); e != list_end (&entries); ) {
+  //printf ("going to loop for frame %p\n", f->page);
+  
+  while (!list_empty (entries)) {
+    e = list_pop_front (entries);
     supp_pte *entry = list_entry (e, supp_pte, share_elem);
+    //printf ("looping for frame %p, addr %p\n", f->page, entry->addr);
     pagedir_clear_page (entry->thread->pagedir, entry->addr);
     entry->page_frame = NULL;
-    e = list_remove (e);
   }
 
   list_remove (&f->elem);
-  palloc_free_page (f);
+
+  palloc_free_page (f->page);
   free (f);
   hash_delete (&share_table, &found_share_entry->elem);
   free (found_share_entry);
@@ -153,10 +178,10 @@ evict (void) {
       struct thread *eviction_thread = to_be_evicted_entry->thread;
       uint32_t *pd = eviction_thread->pagedir;
 
-      if (pagedir_is_accessed (pd, hand->page)) {
+      if (pagedir_is_accessed (pd, to_be_evicted_entry->addr)) {
         /* Set the reference bit to true because the page has been accessed */
         hand->r_bit = true;
-        pagedir_set_accessed (pd, hand->page, false);
+        pagedir_set_accessed (pd, to_be_evicted_entry->addr, false);
       } else {
         if (hand->r_bit == false) {
           //printf ("we evict single  %p\n", hand->page);

@@ -311,7 +311,6 @@ process_exit (void)
     e = list_pop_front (file_list);
     process_file *current_file = list_entry (e, process_file, file_elem);
     file_close (current_file->file);
-    list_remove (e);
     free (current_file);
   }
 
