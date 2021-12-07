@@ -716,6 +716,7 @@ setup_stack (void **esp)
   supp_pte *entry = hash_entry (entry_elem, supp_pte, elem);
   
   bool success = load_stack_page (entry);
+  //printf ("INITIAL STACK IS: %p\n", entry->addr);
 
   if (success) {
     *esp = PHYS_BASE;

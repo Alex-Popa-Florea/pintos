@@ -49,7 +49,7 @@ create_frame (void *page, supp_pte *entry) {
     new_frame->can_be_shared = !(entry->writable) && (entry->page_source == DISK);
 
     list_push_back (&frame_table, &new_frame->elem);
-    
+    //printf ("we added normally %p on page %p\n", entry->addr, page);
     return new_frame;
 }
 
@@ -91,10 +91,13 @@ check_page_access_bit (struct list *entries, frame_table_entry *hand) {
 }
 
 static void 
-evict_sharing_entries (struct list *entries, frame_table_entry *f) {
+evict_sharing_entries (share_entry *found_share_entry, frame_table_entry *f) {
+
+  struct list entries = found_share_entry->sharing_ptes;
+
   struct list_elem *e;
 
-  for (e = list_begin (entries); e != list_end (entries); ) {
+  for (e = list_begin (&entries); e != list_end (&entries); ) {
     supp_pte *entry = list_entry (e, supp_pte, share_elem);
     pagedir_clear_page (entry->thread->pagedir, entry->addr);
     entry->page_frame = NULL;
@@ -104,20 +107,25 @@ evict_sharing_entries (struct list *entries, frame_table_entry *f) {
   list_remove (&f->elem);
   palloc_free_page (f);
   free (f);
+  hash_delete (&share_table, &found_share_entry->elem);
+  free (found_share_entry);
 }
 
 /* Evicts page based on the clock algorithm */
 void
 evict (void) {
+  //printf ("we try to evict\n");
   /* Exit loop once a page has been evicted */
   bool evicted = false;
+  frame_table_entry *hand;
   while (!evicted) {
     // Hand points to the current frame table entry
     current_entry_elem = next_frame_table_elem (current_entry_elem);
-    frame_table_entry *hand = list_entry (current_entry_elem, frame_table_entry, elem);
-    
+    hand = list_entry (current_entry_elem, frame_table_entry, elem);
+    //printf ("we loop through, now at page  %p\n", hand->page);
 
     if (hand->can_be_shared) {
+      //printf ("we think to evict shared  %p\n", hand->page);
       share_entry search;
       search.frame = hand;
 
@@ -127,9 +135,10 @@ evict (void) {
         if (!check_page_access_bit (&found_entry->sharing_ptes, hand)) {
 
           if (hand->r_bit == false) {
+            //printf ("we evict shared  %p\n", hand->page);
 
             /* Evict the first page without a set reference bit */
-            evict_sharing_entries (&found_entry->sharing_ptes, hand);
+            evict_sharing_entries (found_entry, hand);
             
             evicted = true;
           } else {
@@ -138,6 +147,7 @@ evict (void) {
         }
       }
     } else {
+      //printf ("we think to evict single  %p\n", hand->page);
       supp_pte *to_be_evicted_entry = (supp_pte *) hand->creator;
       
       struct thread *eviction_thread = to_be_evicted_entry->thread;
@@ -149,9 +159,11 @@ evict (void) {
         pagedir_set_accessed (pd, hand->page, false);
       } else {
         if (hand->r_bit == false) {
+          //printf ("we evict single  %p\n", hand->page);
 
           /* Evict the first page without a set reference bit */
           if (to_be_evicted_entry->page_source == MMAP) {
+            //printf ("we evict mmap  %p\n", hand->page);
             /* Unmap memory-mapped files */
             struct list *file_list = &eviction_thread->mmapped_file_list;
             struct list_elem *e;
@@ -163,12 +175,13 @@ evict (void) {
               }
             }
           } else {
+            //printf ("we evict non mmap  %p\n", hand->page);
             if (to_be_evicted_entry->page_source == STACK || pagedir_is_dirty (pd, hand->page)) {
+              //printf ("we evict loadable  %p\n", hand->page);
               /* Stack pages and dirty pages are written to swap space */
               to_be_evicted_entry->is_in_swap_space = true;
-              load_page_into_swap_space (hand->page);
+              load_page_into_swap_space (to_be_evicted_entry->addr, hand->page);
             }
-            
             /* Remove the evicted page from the frame table */
           
             free_frame_from_supp_pte (&to_be_evicted_entry->elem, eviction_thread);
@@ -210,14 +223,7 @@ free_frame_from_supp_pte (struct hash_elem *e, void *aux) {
       struct hash_elem *search_elem = hash_find (&share_table, &search_entry.elem);
 
       share_entry *found_share_entry = hash_entry (search_elem, share_entry, elem);
-      struct list_elem *element;
-      for (element = list_begin (&found_share_entry->sharing_ptes); element != list_end (&found_share_entry->sharing_ptes); element = list_next (element)) {
-        supp_pte *current_supp_pte = list_entry (element, supp_pte, share_elem);
-        if (current_supp_pte->thread->tid == t->tid) {
-          list_remove (&current_supp_pte->share_elem);
-          break;
-        }
-      }
+      list_remove (&entry->share_elem);
 
       if (list_empty (&found_share_entry->sharing_ptes)) {
         if (&f->elem == current_entry_elem) {
@@ -227,6 +233,8 @@ free_frame_from_supp_pte (struct hash_elem *e, void *aux) {
         entry->page_frame = NULL;
         palloc_free_page (f->page);
         free (f);
+        hash_delete (&share_table, &found_share_entry->elem);
+        free (found_share_entry);
       }
     } else {
       if (&f->elem == current_entry_elem) {

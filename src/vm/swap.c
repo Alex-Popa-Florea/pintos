@@ -24,7 +24,7 @@ void initialise_swap_space (void) {
     lock_init (&bitmap_lock);
 }
 
-bool load_page_into_swap_space (void *page) {
+bool load_page_into_swap_space (uint8_t *supp_pte_addr, void *page) {
     lock_acquire (&bitmap_lock);
     lock_acquire (&swap_table_lock);
     /*
@@ -39,7 +39,7 @@ bool load_page_into_swap_space (void *page) {
     }
     /* Insert first sector into swap table */
     swap_entry *new_entry = (swap_entry *) malloc (sizeof (swap_entry));
-    new_entry->page = page;
+    new_entry->supp_pte_addr = supp_pte_addr;
     new_entry->index = index;
     hash_insert (&swap_table, &new_entry->elem);
 
@@ -49,28 +49,35 @@ bool load_page_into_swap_space (void *page) {
     struct block *swap_block = block_get_role (BLOCK_SWAP);
     void *start_addr = page;
     for (int i = 0; i < SECTORS_PER_PAGE; i++) {
-        start_addr += i * BLOCK_SECTOR_SIZE;
         block_write (swap_block, index, start_addr);
+        start_addr += BLOCK_SECTOR_SIZE;
         index++;
     }
+    //printf ("Load:\n");
+    //print_swap_table (&swap_table);
 
     lock_release (&swap_table_lock);
     lock_release (&bitmap_lock);
     return true;
 }
 
-void retrieve_from_swap_space (void *page, uint8_t *addr) {
+void retrieve_from_swap_space (uint8_t *supp_pte_addr, void *empty_page) {
     lock_acquire (&swap_table_lock);
 
-    void *start_addr = page;
+    void *start_addr = empty_page;
     struct block *swap_block = block_get_role (BLOCK_SWAP);
     swap_entry entry;
-    entry.page = addr;
+    entry.supp_pte_addr = supp_pte_addr;
 
+    //printf ("Retrieve:\n");
+    //print_swap_table (&swap_table);
+
+    //printf ("Page: %p, Addr: %p\n", empty_page, supp_pte_addr);
     /* 
         Find index of first sector of page from swap table 
     */
     struct hash_elem *found_elem = hash_find (&swap_table, &entry.elem);
+
     
     size_t index = hash_entry (found_elem, swap_entry, elem)->index;
 
@@ -79,11 +86,11 @@ void retrieve_from_swap_space (void *page, uint8_t *addr) {
         and resets the corresponding bit in sector_bitmap
     */
     for (int i = 0; i < SECTORS_PER_PAGE; i++) {
-        start_addr += i * BLOCK_SECTOR_SIZE;
         
         block_read (swap_block, index, start_addr);
         bitmap_flip (sector_bitmap, index);
 
+        start_addr += BLOCK_SECTOR_SIZE;
         index++;
     }
     struct hash_elem *deleted = hash_delete (&swap_table, found_elem);
@@ -98,7 +105,7 @@ void retrieve_from_swap_space (void *page, uint8_t *addr) {
 static unsigned 
 swap_hash (const struct hash_elem *e, void *aux UNUSED) {
   const swap_entry *entry = hash_entry (e, swap_entry, elem);
-  return hash_bytes (&entry->page, sizeof entry->page);
+  return hash_bytes (&entry->supp_pte_addr, sizeof entry->supp_pte_addr);
 }
 
 /* 
@@ -110,7 +117,19 @@ swap_hash_compare (const struct hash_elem *a, const struct hash_elem *b, void *a
   const swap_entry *entryA = hash_entry (a, swap_entry, elem);
   const swap_entry *entryB = hash_entry (b, swap_entry, elem);
 
-  return entryA->page < entryB->page;
+  return entryA->supp_pte_addr < entryB->supp_pte_addr;
 }
 
 
+void
+print_swap_table (struct hash *h) {
+  printf ("Swap space:\n");
+  struct hash_iterator i;
+
+  hash_first (&i, h);
+  while (hash_next (&i))
+  {
+    swap_entry *entry = hash_entry (hash_cur (&i), swap_entry, elem);
+    printf ("--entry: Page: %p, Index: %d\n", entry->supp_pte_addr, entry->index);
+  }
+}

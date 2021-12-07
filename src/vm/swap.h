@@ -28,7 +28,7 @@ extern struct hash swap_table;
   Struct for an entry in swap table
 */
 typedef struct {
-	void *page;                    /* Start address of page address space (key) */
+	void *supp_pte_addr;           /* Start address of page address space (key) */
 	size_t index;                  /* Index of first block sector in device */
 
   struct hash_elem elem;         /* Hash table elem */
@@ -53,12 +53,15 @@ void initialise_swap_space (void);
 	Writes contents of PAGE to first available contiguous SECTORS_PER_PAGE 
 	sectors in BLOCK_SWAP
 */
-bool load_page_into_swap_space (void *page);
+bool load_page_into_swap_space (uint8_t *, void *);
 
 /* 
 	Populates PAGE from swap space with data corresponding to 
 	supp_pte address ADDR
 */
-void retrieve_from_swap_space (void *page, uint8_t *addr);
+void retrieve_from_swap_space (uint8_t *, void *);
+
+
+void print_swap_table (struct hash *h);
 
 #endif

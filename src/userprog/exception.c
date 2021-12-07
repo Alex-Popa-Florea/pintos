@@ -160,6 +160,9 @@ page_fault (struct intr_frame *f)
   not_present = (f->error_code & PF_P) == 0;
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
+
+  //printf ("FAULTING FOR : %p, ROUNDED: %p\n", fault_addr, pg_round_down (fault_addr));
+
   /* 
    If page fault occurred because page is not present, 
    loads the page from the current thread's supplemental page table
@@ -179,21 +182,28 @@ page_fault (struct intr_frame *f)
         switch (entry->page_source)
         {
         case MMAP:
-          load_success = load_mmap_page (entry);
+          //printf ("LOADING mmap for entry: %p\n", entry->addr);
+          load_success = load_page (entry);
           break;
         
         case STACK:
+          //printf ("LOADING stack for entry: %p\n", entry->addr);
           if (entry->is_in_swap_space) {
+            //printf ("from swap for entry: %p\n", entry->addr);
             load_success = load_swap_space_page (entry);
           } else {
+            //printf ("not from swap for entry: %p\n", entry->addr);
             load_success = load_stack_page (entry);
           }
           break;
 
         case DISK:
+          //printf ("LOADING disk for entry: %p\n", entry->addr);
           if (entry->is_in_swap_space) {
+            //printf ("from swap for entry: %p\n", entry->addr);
             load_success = load_swap_space_page (entry);
           } else {
+            //printf ("not from swap for entry: %p\n", entry->addr);
             load_success = load_page (entry);
           }
           break;
@@ -222,6 +232,7 @@ page_fault (struct intr_frame *f)
   if (!load_success && not_overflow && valid_fault_address && is_user_vaddr (fault_addr)) {
     struct hash_elem *entry_elem = set_up_pte_for_stack (fault_addr);
     supp_pte *entry = hash_entry (entry_elem, supp_pte, elem);
+    //printf ("LOADING new stack for entry: %p\n", entry->addr);
     load_success = load_stack_page (entry);
   }
   if (!load_success) {
@@ -267,6 +278,36 @@ load_stack_page (supp_pte *entry) {
 }
 
 
+static bool
+entry_from_share_table (supp_pte *entry) {
+
+  frame_table_entry search_frame;
+  search_frame.inode = file_get_inode (entry->file);
+  search_frame.ofs = entry->ofs;
+
+  share_entry search_entry;
+  search_entry.frame = &search_frame;
+
+  struct hash_elem *search_elem = hash_find (&share_table, &search_entry.elem);
+  if (search_elem != NULL) {
+    /* Page has already been allocated so it can be shared */
+    share_entry *found_entry = hash_entry (search_elem, share_entry, elem);
+
+    // Add to list of pages in frame
+    entry->page_frame = found_entry->frame;
+    list_push_back (&found_entry->sharing_ptes, &entry->share_elem);
+
+
+    if (!install_page (entry->addr, found_entry->frame->page, entry->writable)) {
+      return false;
+    }
+
+    return true;
+  }
+  
+  return false;
+}
+
 /*
   Loads a page from a supplemental page table entry into an active page, 
   using the frame table. If the page is readable, checks the share table and
@@ -275,27 +316,11 @@ load_stack_page (supp_pte *entry) {
 static bool
 load_page (supp_pte *entry) {
   lock_tables ();
+  bool shareable = !entry->writable && entry->page_source == DISK;
   /* Check the share table for read-only pages 
      to see if there is already an entry */
-  if (!entry->writable && entry->page_source == DISK) {
-    frame_table_entry search_frame;
-    search_frame.inode = file_get_inode (entry->file);
-    search_frame.ofs = entry->ofs;
-
-    share_entry search_entry;
-    search_entry.frame = &search_frame;
-
-    struct hash_elem *search_elem = hash_find (&share_table, &search_entry.elem);
-    if (search_elem != NULL) {
-      /* Page has already been allocated so it can be shared */
-      share_entry *found_entry = hash_entry (search_elem, share_entry, elem);
-
-      // Add to list of pages in frame
-      entry->page_frame = found_entry->frame;
-      list_push_back (&found_entry->sharing_ptes, &entry->share_elem);
-
-
-      install_page (entry->addr, found_entry->frame->page, entry->writable);
+  if (shareable) {
+    if (entry_from_share_table (entry)) {
       release_tables ();
       return true;
     }
@@ -319,7 +344,7 @@ load_page (supp_pte *entry) {
   }
 
   /* Add the frame to the share table if readable */
-  if (!entry->writable && entry->page_source == DISK) {
+  if (shareable) {
     share_entry *new_share_entry = create_share_entry (entry, new_frame);
     hash_insert (&share_table, &new_share_entry->elem);
   }
@@ -352,18 +377,19 @@ load_page (supp_pte *entry) {
 */
 static bool
 load_mmap_page (supp_pte *entry) {
+  lock_tables ();
 
   frame_table_entry *new_frame = try_allocate_page (PAL_USER, entry);
   uint8_t *kpage = new_frame->page;
   if (kpage == NULL) {
+    release_tables ();
     return false;
   }
 
   /* Add the page to the process's address space. */
   if (!install_page (entry->addr, kpage, entry->writable)) {
-    lock_acquire (&frame_table_lock);
     free_frame_from_supp_pte (&entry->elem, thread_current ());
-    lock_release (&frame_table_lock);
+    release_tables ();
     return false; 
   }
   
@@ -377,20 +403,21 @@ load_mmap_page (supp_pte *entry) {
   held = release_filesys_lock (held);
 
   if (bytes_read != (off_t) entry->read_bytes) {
-    lock_acquire (&frame_table_lock);
     free_frame_from_supp_pte (&entry->elem, thread_current ());
-    lock_release (&frame_table_lock);
+    release_tables ();
     return false; 
   }
 
   /* Set the remaining bytes of the page to 0 */
   memset (kpage + entry->read_bytes, 0, entry->zero_bytes);
   entry->page_frame = new_frame;
+  release_tables ();
   return true;
 }
 
 bool
 load_swap_space_page (supp_pte *entry) {
+  lock_tables ();
 
   /* Get a new page of memory. */
   frame_table_entry *new_frame = try_allocate_page (PAL_USER, entry);
@@ -402,14 +429,14 @@ load_swap_space_page (supp_pte *entry) {
 
   /* Add the page to the process's address space. */
   if (!install_page (entry->addr, kpage, entry->writable)) {
-    lock_acquire (&frame_table_lock);
     free_frame_from_supp_pte (&entry->elem, thread_current ());
-    lock_release (&frame_table_lock);
+    release_tables ();
     return false; 
   }
 
-  retrieve_from_swap_space (kpage, entry->addr);
+  retrieve_from_swap_space (entry->addr, kpage);
   entry->is_in_swap_space = false;
+  release_tables ();
   return true;
 }
 
