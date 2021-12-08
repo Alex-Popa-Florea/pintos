@@ -210,7 +210,9 @@ evict (void) {
 
 void
 free_frame_table_entries_of_thread (struct thread *t) {
-  lock_tables ();
+  if (!lock_held_by_current_thread (&frame_table_lock)) {
+    lock_tables ();
+  }
   struct hash supp_table = t->supp_page_table;
   hash_apply (&supp_table, &free_frame_from_supp_pte);
   release_tables ();

@@ -27,6 +27,8 @@ static bool load_page (supp_pte *);
 static bool load_mmap_page (supp_pte *);
 static bool acquire_filesys_lock (bool);
 static bool release_filesys_lock (bool);
+static bool acquire_table_locks (bool);
+static bool release_table_locks (bool);
 
 /* Registers handlers for interrupts that can be caused by user
    programs.
@@ -161,7 +163,7 @@ page_fault (struct intr_frame *f)
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
 
-  //printf ("FAULTING FOR : %p, ROUNDED: %p\n", fault_addr, pg_round_down (fault_addr));
+  printf ("FAULTING FOR : %p, ROUNDED: %p THREAD %d\n", fault_addr, pg_round_down (fault_addr), thread_current ()->tid);
 
   /* 
    If page fault occurred because page is not present, 
@@ -182,28 +184,28 @@ page_fault (struct intr_frame *f)
         switch (entry->page_source)
         {
         case MMAP:
-          //printf ("LOADING mmap for entry: %p\n", entry->addr);
+          printf ("LOADING mmap for entry: %p\n", entry->addr);
           load_success = load_page (entry);
           break;
         
         case STACK:
-          //printf ("LOADING stack for entry: %p\n", entry->addr);
+          printf ("LOADING stack for entry: %p\n", entry->addr);
           if (entry->is_in_swap_space) {
-            //printf ("from swap for entry: %p\n", entry->addr);
+            printf ("from swap for entry: %p\n", entry->addr);
             load_success = load_swap_space_page (entry);
           } else {
-            //printf ("not from swap for entry: %p\n", entry->addr);
+            printf ("not from swap for entry: %p\n", entry->addr);
             load_success = load_stack_page (entry);
           }
           break;
 
         case DISK:
-          //printf ("LOADING disk for entry: %p\n", entry->addr);
+          printf ("LOADING disk for entry: %p\n", entry->addr);
           if (entry->is_in_swap_space) {
-            //printf ("from swap for entry: %p\n", entry->addr);
+            printf ("from swap for entry: %p\n", entry->addr);
             load_success = load_swap_space_page (entry);
           } else {
-            //printf ("not from swap for entry: %p\n", entry->addr);
+            printf ("not from swap for entry: %p\n", entry->addr);
             load_success = load_page (entry);
           }
           break;
@@ -222,15 +224,12 @@ page_fault (struct intr_frame *f)
   /* Checks the fault address is not outside the stack's allowed 8 MB */
   bool not_overflow = PHYS_BASE - pg_round_down (fault_addr) <= (1 << 23);
 
-  //check underflow
-
   /* Checks the fault address is above the stack pointer, equal to the stack
      pointer - 32 or equal to the stack pointer - 4
   */ 
   bool valid_fault_address = (uint32_t*) fault_addr >= (uint32_t *) f->esp
                               || (uint32_t*) fault_addr == (uint32_t *) (f->esp - 32)
                               || (uint32_t*) fault_addr == (uint32_t *) (f->esp - 4);
-                              //collapse into one case
 
   if (!load_success && not_overflow && valid_fault_address && is_user_vaddr (fault_addr)) {
     struct hash_elem *entry_elem = set_up_pte_for_stack (fault_addr);
@@ -239,8 +238,8 @@ page_fault (struct intr_frame *f)
     load_success = load_stack_page (entry);
   }
   if (!load_success) {
-    //print_page_fault (fault_addr, not_present, write, user);
-    exit(-1);
+    // print_page_fault (fault_addr, not_present, write, user);
+    exit (-1);
   }
 }
 
@@ -260,23 +259,24 @@ print_page_fault (void *fault_addr, bool not_present, bool write, bool user)
 bool 
 load_stack_page (supp_pte *entry) {
 
-  lock_tables ();
+  bool table_held = false;
+  table_held = acquire_table_locks (table_held);
   frame_table_entry *new_frame = try_allocate_page (PAL_USER, entry);
   uint8_t *kpage = new_frame->page;
 
   if (!kpage) {
-    release_tables ();
+    release_table_locks (table_held);
     return false;
   }
   
   if (!install_page (entry->addr, kpage, entry->writable)) {
     free_frame_from_supp_pte (&entry->elem, thread_current ());
-    release_tables ();
+    release_table_locks (table_held);
     return false;
   }
 
   entry->page_frame = new_frame;
-  release_tables ();
+  release_table_locks (table_held);
   return true;
 }
 
@@ -318,13 +318,15 @@ entry_from_share_table (supp_pte *entry) {
 */
 static bool
 load_page (supp_pte *entry) {
-  lock_tables ();
+
+  bool table_held = false;
+  table_held = acquire_table_locks (table_held);
   bool shareable = !entry->writable && entry->page_source == DISK;
   /* Check the share table for read-only pages 
      to see if there is already an entry */
   if (shareable) {
     if (entry_from_share_table (entry)) {
-      release_tables ();
+      release_table_locks (table_held);
       return true;
     }
   }
@@ -342,14 +344,14 @@ load_page (supp_pte *entry) {
   uint8_t *kpage = new_frame->page;
 
   if (kpage == NULL) {
-    release_tables ();
+    release_table_locks (table_held);
     return false;
   }
   
   /* Add the page to the process's address space. */
   if (!install_page (entry->addr, kpage, entry->writable)) {
     free_frame_from_supp_pte (&entry->elem, thread_current ());
-    release_tables ();
+    release_table_locks (table_held);
     return false;
   }
 
@@ -369,14 +371,14 @@ load_page (supp_pte *entry) {
 
   if (bytes_read != (off_t) entry->read_bytes) {
     free_frame_from_supp_pte (&entry->elem, thread_current ());
-    release_tables ();
+    release_table_locks (table_held);
     return false;
   }
 
   /* Set the remaining bytes of the page to 0 */
   memset (kpage + entry->read_bytes, 0, entry->zero_bytes);
   entry->page_frame = new_frame;
-  release_tables ();
+  release_table_locks (table_held);
   return true;
 }
 
@@ -387,19 +389,21 @@ load_page (supp_pte *entry) {
 */
 static bool
 load_mmap_page (supp_pte *entry) {
-  lock_tables ();
+
+  bool table_held = false;
+  table_held = acquire_table_locks (table_held);
 
   frame_table_entry *new_frame = try_allocate_page (PAL_USER, entry);
   uint8_t *kpage = new_frame->page;
   if (kpage == NULL) {
-    release_tables ();
+    release_table_locks (table_held);
     return false;
   }
 
   /* Add the page to the process's address space. */
   if (!install_page (entry->addr, kpage, entry->writable)) {
     free_frame_from_supp_pte (&entry->elem, thread_current ());
-    release_tables ();
+    release_table_locks (table_held);
     return false; 
   }
   
@@ -414,20 +418,22 @@ load_mmap_page (supp_pte *entry) {
 
   if (bytes_read != (off_t) entry->read_bytes) {
     free_frame_from_supp_pte (&entry->elem, thread_current ());
-    release_tables ();
+    release_table_locks (table_held);
     return false; 
   }
 
   /* Set the remaining bytes of the page to 0 */
   memset (kpage + entry->read_bytes, 0, entry->zero_bytes);
   entry->page_frame = new_frame;
-  release_tables ();
+  release_table_locks (table_held);
   return true;
 }
 
 bool
 load_swap_space_page (supp_pte *entry) {
-  lock_tables ();
+
+  bool table_held = false;
+  table_held = acquire_table_locks (table_held);
 
   /* Get a new page of memory. */
   frame_table_entry *new_frame = try_allocate_page (PAL_USER, entry);
@@ -440,14 +446,15 @@ load_swap_space_page (supp_pte *entry) {
   /* Add the page to the process's address space. */
   if (!install_page (entry->addr, kpage, entry->writable)) {
     free_frame_from_supp_pte (&entry->elem, thread_current ());
-    release_tables ();
+    release_table_locks (table_held);
     return false; 
   }
 
   retrieve_from_swap_space (entry->addr, kpage);
   entry->is_in_swap_space = false;
   entry->page_frame = new_frame;
-  release_tables ();
+
+  release_table_locks (table_held);
   return true;
 }
 
@@ -473,6 +480,32 @@ release_filesys_lock (bool held) {
   if (held) {
     held = false;
     lock_release (&file_system_lock);
+  }
+  return held;
+}
+
+/*
+  Acquires the table locks of the current thread
+  Returns true if the locks are acquired
+*/
+static bool
+acquire_table_locks (bool held) {
+  if (!lock_held_by_current_thread (&frame_table_lock)) {
+    lock_tables ();
+    held = true;
+  }
+  return held;
+}
+
+
+/*
+  Releases the table locks if the current thread currently holds them
+*/
+static bool
+release_table_locks (bool held) {
+  if (held) {
+    held = false;
+    release_tables ();
   }
   return held;
 }
