@@ -468,7 +468,6 @@ load (const char *file_name, void (**eip) (void), void **esp)
   int i;
 
   lock_tables ();
-
   lock_acquire (&file_system_lock);
 
   /* Allocate and activate page directory. */
@@ -481,7 +480,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
   file = filesys_open (file_name);
   if (file == NULL) 
     {
-      printf ("load: %s: open failed\n", file_name);
+      // printf ("load: %s: open failed\n", file_name);
       goto done; 
     }
 
@@ -494,7 +493,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
       || ehdr.e_phentsize != sizeof (struct Elf32_Phdr)
       || ehdr.e_phnum > 1024) 
     {
-      printf ("load: %s: error loading executable\n", file_name);
+      // printf ("load: %s: error loading executable\n", file_name);
       goto done; 
     }  
   /* Read program headers. */

@@ -163,7 +163,7 @@ page_fault (struct intr_frame *f)
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
 
-  printf ("FAULTING FOR : %p, ROUNDED: %p THREAD %d\n", fault_addr, pg_round_down (fault_addr), thread_current ()->tid);
+  // printf ("FAULTING FOR : %p, ROUNDED: %p THREAD %d\n", fault_addr, pg_round_down (fault_addr), thread_current ()->tid);
 
   /* 
    If page fault occurred because page is not present, 
@@ -184,28 +184,28 @@ page_fault (struct intr_frame *f)
         switch (entry->page_source)
         {
         case MMAP:
-          printf ("LOADING mmap for entry: %p\n", entry->addr);
+          // printf ("LOADING mmap for entry: %p\n", entry->addr);
           load_success = load_page (entry);
           break;
         
         case STACK:
-          printf ("LOADING stack for entry: %p\n", entry->addr);
+          // printf ("LOADING stack for entry: %p\n", entry->addr);
           if (entry->is_in_swap_space) {
-            printf ("from swap for entry: %p\n", entry->addr);
+            // printf ("from swap for entry: %p\n", entry->addr);
             load_success = load_swap_space_page (entry);
           } else {
-            printf ("not from swap for entry: %p\n", entry->addr);
+            // printf ("not from swap for entry: %p\n", entry->addr);
             load_success = load_stack_page (entry);
           }
           break;
 
         case DISK:
-          printf ("LOADING disk for entry: %p\n", entry->addr);
+          // printf ("LOADING disk for entry: %p\n", entry->addr);
           if (entry->is_in_swap_space) {
-            printf ("from swap for entry: %p\n", entry->addr);
+            // printf ("from swap for entry: %p\n", entry->addr);
             load_success = load_swap_space_page (entry);
           } else {
-            printf ("not from swap for entry: %p\n", entry->addr);
+            // printf ("not from swap for entry: %p\n", entry->addr);
             load_success = load_page (entry);
           }
           break;
@@ -238,8 +238,9 @@ page_fault (struct intr_frame *f)
     load_success = load_stack_page (entry);
   }
   if (!load_success) {
-    // print_page_fault (fault_addr, not_present, write, user);
-    exit (-1);
+    print_page_fault (fault_addr, not_present, write, user);
+    // exit (-1);
+    kill (f);
   }
 }
 

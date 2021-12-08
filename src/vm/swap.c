@@ -31,9 +31,9 @@ bool load_page_into_swap_space (uint8_t *supp_pte_addr, void *page) {
     /*
         Finds first contiguous sectors of BLOCK_SWAP to store whole page
     */
-    printf ("Load:thread %d\n", thread_current ()->tid);
-    printf ("Page im removing from: %p, Addr: %p\n", page, supp_pte_addr);
-    print_swap_table (&swap_table);
+    // printf ("Load:thread %d\n", thread_current ()->tid);
+    // printf ("Page im removing from: %p, Addr: %p\n", page, supp_pte_addr);
+    // print_swap_table (&swap_table);
 
     size_t index = bitmap_scan_and_flip (sector_bitmap, FIRST_SECTOR, SECTORS_PER_PAGE, false);
     if (index == BITMAP_ERROR) {
@@ -58,9 +58,9 @@ bool load_page_into_swap_space (uint8_t *supp_pte_addr, void *page) {
         index++;
     }
 
-    printf ("End of Load: thread %d\n", thread_current ()->tid);
-    printf ("Page im removing from: %p, Addr: %p\n", page, supp_pte_addr);
-    print_swap_table (&swap_table);
+    // printf ("End of Load: thread %d\n", thread_current ()->tid);
+    // printf ("Page im removing from: %p, Addr: %p\n", page, supp_pte_addr);
+    // print_swap_table (&swap_table);
 
     lock_release (&swap_table_lock);
     lock_release (&bitmap_lock);
@@ -75,9 +75,9 @@ void retrieve_from_swap_space (uint8_t *supp_pte_addr, void *empty_page) {
     swap_entry entry;
     entry.supp_pte_addr = supp_pte_addr;
 
-    printf ("Start of Retrieve: thread %d\n", thread_current ()->tid);
-    printf ("Page im adding to: %p, Addr: %p\n", empty_page, supp_pte_addr);
-    print_swap_table (&swap_table);
+    // printf ("Start of Retrieve: thread %d\n", thread_current ()->tid);
+    // printf ("Page im adding to: %p, Addr: %p\n", empty_page, supp_pte_addr);
+    // print_swap_table (&swap_table);
 
     /* 
         Find index of first sector of page from swap table 
@@ -102,9 +102,9 @@ void retrieve_from_swap_space (uint8_t *supp_pte_addr, void *empty_page) {
     struct hash_elem *deleted = hash_delete (&swap_table, found_elem);
     free (hash_entry (deleted, swap_entry, elem));
 
-    printf ("Start of Retrieve: thread %d\n", thread_current ()->tid);
-    printf ("Page im adding to: %p, Addr: %p\n", empty_page, supp_pte_addr);
-    print_swap_table (&swap_table);
+    // printf ("Start of Retrieve: thread %d\n", thread_current ()->tid);
+    // printf ("Page im adding to: %p, Addr: %p\n", empty_page, supp_pte_addr);
+    // print_swap_table (&swap_table);
 
     lock_release (&swap_table_lock);
 }
@@ -133,13 +133,13 @@ swap_hash_compare (const struct hash_elem *a, const struct hash_elem *b, void *a
 
 void
 print_swap_table (struct hash *h) {
-  printf ("Swap space:\n");
+  // printf ("Swap space:\n");
   struct hash_iterator i;
 
   hash_first (&i, h);
   while (hash_next (&i))
   {
     swap_entry *entry = hash_entry (hash_cur (&i), swap_entry, elem);
-    printf ("--entry: Supppte: %p, Index: %d\n", entry->supp_pte_addr, entry->index);
+    // printf ("--entry: Supppte: %p, Index: %d\n", entry->supp_pte_addr, entry->index);
   }
 }
