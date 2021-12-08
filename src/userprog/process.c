@@ -467,6 +467,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
   bool success = false;
   int i;
 
+  lock_tables ();
   lock_acquire (&file_system_lock);
 
   /* Allocate and activate page directory. */
@@ -574,6 +575,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
     file_deny_write (file);
   }
   lock_release (&file_system_lock);
+  release_tables ();
   return success;
 }
 

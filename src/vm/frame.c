@@ -109,11 +109,11 @@ evict_sharing_entries (share_entry *found_share_entry, frame_table_entry *f) {
     current_entry_elem = prev_frame_table_elem (current_entry_elem);
   }
 
+  hash_delete (&share_table, &found_share_entry->elem);
   list_remove (&f->elem);
 
   palloc_free_page (f->page);
   free (f);
-  hash_delete (&share_table, &found_share_entry->elem);
   free (found_share_entry);
 }
 
@@ -210,42 +210,102 @@ evict (void) {
 
 void
 free_frame_table_entries_of_thread (struct thread *t) {
-  lock_tables ();
+  if (!lock_held_by_current_thread (&frame_table_lock)) {
+    lock_tables ();
+  }
   struct hash supp_table = t->supp_page_table;
   hash_apply (&supp_table, &free_frame_from_supp_pte);
   release_tables ();
 }
 
+void
+print_supp_pt (struct hash *h) {
+  printf ("Share table for thread %d: \n", thread_current ()->tid);
+  struct hash_iterator i;
+
+  hash_first (&i, h);
+  while (hash_next (&i))
+  {
+    share_entry *entry = hash_entry (hash_cur (&i), share_entry, elem);
+    printf ("--entry: %p\n",entry->frame);
+
+    struct list_elem *e;
+
+    for (e = list_begin (&entry->sharing_ptes); e != list_end (&entry->sharing_ptes);e = list_next (e))
+    {
+      supp_pte *try = list_entry (e, supp_pte, share_elem);
+      printf("----supp pte: %p\n", try->addr);
+      
+    }
+    
+  }
+}
 
 void 
 free_frame_from_supp_pte (struct hash_elem *e, void *aux) {
   struct thread *t = (struct thread *) aux;
   supp_pte *entry = hash_entry (e, supp_pte, elem);
   pagedir_clear_page (t->pagedir, entry->addr);
-
   frame_table_entry *f = entry->page_frame;
+
   if (f != NULL) {
     if (f->can_be_shared) {
-
+      //printf ("FREEING %p for addr %p\n Before: ", f->page, entry->addr);
+      //print_supp_pt(&share_table);
       share_entry search_entry;
       search_entry.frame = f;
 
       struct hash_elem *search_elem = hash_find (&share_table, &search_entry.elem);
 
+      //ASSERT(search_elem);
+
       share_entry *found_share_entry = hash_entry (search_elem, share_entry, elem);
-      list_remove (&entry->share_elem);
+
+      //ASSERT(&found_share_entry->elem);
+
+      //printf("found share entry %p \n", found_share_entry->frame);
+
+      list_remove (&entry->share_elem); 
+      // printf("LINES 262: ");
+      // print_supp_pt(&share_table);
 
       if (list_empty (&found_share_entry->sharing_ptes)) {
+        //printf ("I GET HERE\n");
         if (&f->elem == current_entry_elem) {
           current_entry_elem = prev_frame_table_elem (current_entry_elem);
         }
+        // printf("LINES 270: ");
+        // print_supp_pt(&share_table);
+
+        struct hash_elem *bob = hash_delete (&share_table, &found_share_entry->elem);
+
+
         list_remove (&f->elem);
+
+        // printf("LINES 273: ");
+        // print_supp_pt(&share_table);
+
+
         entry->page_frame = NULL;
         palloc_free_page (f->page);
         free (f);
-        hash_delete (&share_table, &found_share_entry->elem);
+
+        // printf("278: ");
+        // print_supp_pt(&share_table);
+
+         // found share entry is removed
+        ASSERT(bob);
+
+        // printf("281: ");
+        // print_supp_pt(&share_table);
+
         free (found_share_entry);
+
+        // printf("LINES 280: ");
+        // print_supp_pt(&share_table);
       }
+      // printf("AGET: ");
+      // print_supp_pt(&share_table);
     } else {
       if (&f->elem == current_entry_elem) {
         current_entry_elem = prev_frame_table_elem (current_entry_elem);

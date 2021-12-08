@@ -27,6 +27,9 @@ static bool load_page (supp_pte *);
 static bool load_mmap_page (supp_pte *);
 static bool acquire_filesys_lock (bool);
 static bool release_filesys_lock (bool);
+static bool acquire_table_locks (bool);
+static bool release_table_locks (bool);
+
 
 /* Registers handlers for interrupts that can be caused by user
    programs.
@@ -260,23 +263,25 @@ print_page_fault (void *fault_addr, bool not_present, bool write, bool user)
 bool 
 load_stack_page (supp_pte *entry) {
 
-  lock_tables ();
+  bool table_held = false;
+  table_held = acquire_table_locks (table_held);
+
   frame_table_entry *new_frame = try_allocate_page (PAL_USER, entry);
   uint8_t *kpage = new_frame->page;
 
   if (!kpage) {
-    release_tables ();
+    release_table_locks (table_held);
     return false;
   }
   
   if (!install_page (entry->addr, kpage, entry->writable)) {
     free_frame_from_supp_pte (&entry->elem, thread_current ());
-    release_tables ();
+    release_table_locks (table_held);
     return false;
   }
 
   entry->page_frame = new_frame;
-  release_tables ();
+  release_table_locks (table_held);
   return true;
 }
 
@@ -318,13 +323,16 @@ entry_from_share_table (supp_pte *entry) {
 */
 static bool
 load_page (supp_pte *entry) {
-  lock_tables ();
+
+  bool table_held = false;
+  table_held = acquire_table_locks (table_held);
+
   bool shareable = !entry->writable && entry->page_source == DISK;
   /* Check the share table for read-only pages 
      to see if there is already an entry */
   if (shareable) {
     if (entry_from_share_table (entry)) {
-      release_tables ();
+      release_table_locks (table_held);;
       return true;
     }
   }
@@ -342,14 +350,14 @@ load_page (supp_pte *entry) {
   uint8_t *kpage = new_frame->page;
 
   if (kpage == NULL) {
-    release_tables ();
+    release_table_locks (table_held);
     return false;
   }
   
   /* Add the page to the process's address space. */
   if (!install_page (entry->addr, kpage, entry->writable)) {
     free_frame_from_supp_pte (&entry->elem, thread_current ());
-    release_tables ();
+    release_table_locks (table_held);
     return false;
   }
 
@@ -369,85 +377,44 @@ load_page (supp_pte *entry) {
 
   if (bytes_read != (off_t) entry->read_bytes) {
     free_frame_from_supp_pte (&entry->elem, thread_current ());
-    release_tables ();
+    release_table_locks (table_held);
     return false;
   }
 
   /* Set the remaining bytes of the page to 0 */
   memset (kpage + entry->read_bytes, 0, entry->zero_bytes);
   entry->page_frame = new_frame;
-  release_tables ();
-  return true;
-}
-
-
-/*
-  Loads a memory mapped file page from a supplemental page table entry
-  into an active page
-*/
-static bool
-load_mmap_page (supp_pte *entry) {
-  lock_tables ();
-
-  frame_table_entry *new_frame = try_allocate_page (PAL_USER, entry);
-  uint8_t *kpage = new_frame->page;
-  if (kpage == NULL) {
-    release_tables ();
-    return false;
-  }
-
-  /* Add the page to the process's address space. */
-  if (!install_page (entry->addr, kpage, entry->writable)) {
-    free_frame_from_supp_pte (&entry->elem, thread_current ());
-    release_tables ();
-    return false; 
-  }
-  
-  bool held = false;
-  held = acquire_filesys_lock (held);
-
-  file_seek (entry->file, entry->ofs);
-  /* Load data into the page. */
-  off_t bytes_read = file_read (entry->file, kpage, entry->read_bytes);
-
-  held = release_filesys_lock (held);
-
-  if (bytes_read != (off_t) entry->read_bytes) {
-    free_frame_from_supp_pte (&entry->elem, thread_current ());
-    release_tables ();
-    return false; 
-  }
-
-  /* Set the remaining bytes of the page to 0 */
-  memset (kpage + entry->read_bytes, 0, entry->zero_bytes);
-  entry->page_frame = new_frame;
-  release_tables ();
+  release_table_locks (table_held);
   return true;
 }
 
 bool
 load_swap_space_page (supp_pte *entry) {
-  lock_tables ();
+
+  bool table_held = false;
+  table_held = acquire_table_locks (table_held);
+
 
   /* Get a new page of memory. */
   frame_table_entry *new_frame = try_allocate_page (PAL_USER, entry);
   uint8_t *kpage = new_frame->page;
 
   if (kpage == NULL) {
+    release_table_locks (table_held);
     return false;
   }
 
   /* Add the page to the process's address space. */
   if (!install_page (entry->addr, kpage, entry->writable)) {
     free_frame_from_supp_pte (&entry->elem, thread_current ());
-    release_tables ();
+    release_table_locks (table_held);
     return false; 
   }
 
   retrieve_from_swap_space (entry->addr, kpage);
   entry->is_in_swap_space = false;
   entry->page_frame = new_frame;
-  release_tables ();
+  release_table_locks (table_held);
   return true;
 }
 
@@ -473,6 +440,32 @@ release_filesys_lock (bool held) {
   if (held) {
     held = false;
     lock_release (&file_system_lock);
+  }
+  return held;
+}
+
+/*
+  Acquires the table locks of the current thread
+  Returns true if the locks are acquired
+*/
+static bool
+acquire_table_locks (bool held) {
+  if (!lock_held_by_current_thread (&frame_table_lock)) {
+    lock_tables ();
+    held = true;
+  }
+  return held;
+}
+
+
+/*
+  Releases the table locks if the current thread currently holds them
+*/
+static bool
+release_table_locks (bool held) {
+  if (held) {
+    held = false;
+    release_tables ();
   }
   return held;
 }
