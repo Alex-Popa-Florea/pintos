@@ -9,12 +9,12 @@
 
 
 /*
-  Share hash table
+  Global share hash table
 */
 extern struct hash share_table;
 
 /*
-  Lock to ensure synchronized access to the Share Table
+  Global lock to ensure synchronized access to the Share Table
 */
 extern struct lock share_table_lock;
 
@@ -51,7 +51,8 @@ unsigned share_hash (const struct hash_elem *, void *);
 
 
 /* 
-  Comparison function for the Share Table using the keys for table entries
+  Comparison function for the Share Table using the keys 
+  (inode and offset of file) for table entries
 */
 bool share_hash_compare (const struct hash_elem *, const struct hash_elem *, void *);
 

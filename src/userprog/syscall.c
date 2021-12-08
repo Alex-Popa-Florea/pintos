@@ -18,6 +18,9 @@
 #include "lib/user/syscall.h"
 #include "vm/frame.h"
 
+/* Error code for exiting process abnormally */
+#define EXIT_ERROR (-1)
+
 /* Lock that ensures only one process can access file system at once */
 struct lock file_system_lock; 
 
@@ -53,6 +56,7 @@ static void verify_buffer(const void *, int);
 static void print_termination_output (void);
 
 static void syscall_arr_setup (void);
+static void munmap_for_thread (mapid_t, struct thread *);
 
 void
 syscall_init (void) 
@@ -136,7 +140,7 @@ pid_t
 exec (const char *cmd_line) {
   verify_address (cmd_line);
   if (!cmd_line) {
-    return -1;
+    return EXIT_ERROR;
   } 
 
   pid_t new_process_pid = process_execute (cmd_line);
@@ -208,7 +212,7 @@ open (const char *file) {
   struct file *new_file = filesys_open (file);
   if (new_file == NULL) {
     lock_release (&file_system_lock);
-    return -1;
+    return EXIT_ERROR;
   }
 
 
@@ -240,7 +244,7 @@ int
 filesize (int fd) {
   lock_acquire (&file_system_lock);
 
-  int file_size = -1;
+  int file_size = EXIT_ERROR;
 
   process_file *process_file = find_file (fd);
   if (process_file) {
@@ -482,10 +486,12 @@ munmap (mapid_t mapping) {
   release_tables ();
 }
 
-void
+/* Unmapps file of mapid mapping from memory of given thread  */
+static void
 munmap_for_thread (mapid_t mapping, struct thread *given_thread) {
+  mapid_t MIN_ID = 0;
 
-  if (mapping < 0) {
+  if (mapping < MIN_ID) {
     return;
   }
 
@@ -580,11 +586,11 @@ static void
 verify_address (const void *vaddr) {
 
   if (!vaddr) {
-    exit (-1);
+    exit (EXIT_ERROR);
   }
 
   if (!is_user_vaddr (vaddr)) {
-    exit (-1);
+    exit (EXIT_ERROR);
   }
 
   /* Search for an entry in the supplemental page table */
@@ -594,7 +600,7 @@ verify_address (const void *vaddr) {
   struct hash_elem *old_entry_elem = hash_find (supp_page_table, &old_entry_query.elem);
   
   if (!old_entry_elem) {
-    exit (-1);
+    exit (EXIT_ERROR);
   }
 }
 

@@ -29,7 +29,7 @@ typedef struct {
   
   frame_table_entry *page_frame;      /* Pointer to page frame if page is loaded to frame table, null otherwise */
 
-  struct thread *thread;
+  struct thread *thread;              /* Thread that owns the supplemental page table */
 
   struct hash_elem elem;              /* Hash table elem */
   struct list_elem share_elem;        /* List elem for share table */ 

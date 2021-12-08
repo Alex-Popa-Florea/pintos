@@ -9,7 +9,14 @@
 #include "threads/synch.h"
 #include "vm/supp-page-table.h"
 
+/*
+  Global list of pcbs
+*/
 extern struct list pcb_list;
+
+/*
+  Global lock to ensure synchronized access to the pcb_list
+*/
 extern struct lock pcb_list_lock;
 
 /* 

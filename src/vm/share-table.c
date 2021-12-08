@@ -7,9 +7,7 @@
 
 
 struct hash share_table;
-
 struct lock share_table_lock;
-
 
 share_entry *
 create_share_entry (supp_pte *pte, frame_table_entry *frame) {

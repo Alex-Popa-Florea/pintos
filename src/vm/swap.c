@@ -11,6 +11,8 @@ struct hash swap_table;
 
 static unsigned swap_hash (const struct hash_elem *, void *);
 static bool swap_hash_compare (const struct hash_elem *, const struct hash_elem *, void *);
+static void acquire_locks_for_swap (void);
+static void release_locks_for_swap (void);
 
 void initialise_swap_space (void) {
     /* Initialise bitmap */
@@ -26,19 +28,20 @@ void initialise_swap_space (void) {
 }
 
 bool load_page_into_swap_space (supp_pte *supp_entry, void *page) {
-    lock_acquire (&bitmap_lock);
-    lock_acquire (&swap_table_lock);
+    acquire_locks_for_swap ();
+
     /*
         Finds first contiguous sectors of BLOCK_SWAP to store whole page
     */
-
     size_t index = bitmap_scan_and_flip (sector_bitmap, FIRST_SECTOR, SECTORS_PER_PAGE, false);
     if (index == BITMAP_ERROR) {
-        lock_release (&swap_table_lock);
-        lock_release (&bitmap_lock);
+        release_locks_for_swap ();
         return false;
     }
-    /* Insert first sector into swap table */
+
+    /*
+      Insert first sector into swap table 
+    */
     swap_entry *new_entry = (swap_entry *) malloc (sizeof (swap_entry));
     new_entry->supp_pte = supp_entry;
     new_entry->index = index;
@@ -54,11 +57,8 @@ bool load_page_into_swap_space (supp_pte *supp_entry, void *page) {
         start_addr += BLOCK_SECTOR_SIZE;
         index++;
     }
-    //printf ("Load:\n");
-    //print_swap_table (&swap_table);
 
-    lock_release (&swap_table_lock);
-    lock_release (&bitmap_lock);
+    release_locks_for_swap ();
     return true;
 }
 
@@ -70,10 +70,6 @@ void retrieve_from_swap_space (supp_pte *supp_entry, void *empty_page) {
     swap_entry entry;
     entry.supp_pte = supp_entry;
 
-    //printf ("Retrieve:\n");
-    //print_swap_table (&swap_table);
-
-    //printf ("Page: %p, Addr: %p\n", empty_page, supp_pte_addr);
     /* 
         Find index of first sector of page from swap table 
     */
@@ -128,16 +124,20 @@ swap_hash_compare (const struct hash_elem *a, const struct hash_elem *b, void *a
   }
 }
 
+/*
+  Acquire swap_table_lock and bitmap_lock together when writing to swap space
+*/
+static void
+acquire_locks_for_swap () {
+  lock_acquire (&bitmap_lock);
+  lock_acquire (&swap_table_lock);
+}
 
-void
-print_swap_table (struct hash *h) {
-  printf ("Swap space:\n");
-  struct hash_iterator i;
-
-  hash_first (&i, h);
-  while (hash_next (&i))
-  {
-    swap_entry *entry = hash_entry (hash_cur (&i), swap_entry, elem);
-    //printf ("--entry: Page: %p, Index: %d\n", entry->supp_pte_addr, entry->index);
-  }
+/* 
+  Release swap_table_lock and bitmap_lock when finished writing to swap space
+*/
+static void
+release_locks_for_swap () {
+  lock_release (&swap_table_lock);
+  lock_release (&bitmap_lock);
 }

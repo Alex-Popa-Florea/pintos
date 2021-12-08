@@ -9,6 +9,9 @@
 #define PF_W 0x2    /* 0: read, 1: write. */
 #define PF_U 0x4    /* 0: kernel, 1: user process. */
 
+/* Error code for exiting process abnormally */
+#define EXIT_ERROR (-1)
+
 void exception_init (void);
 void exception_print_stats (void);
 
@@ -16,9 +19,5 @@ void exception_print_stats (void);
   Loads a stack page from a supplemental page table entry into an active page
 */
 bool load_stack_page (supp_pte *);
-
-
-
-bool load_swap_space_page (supp_pte *entry);
 
 #endif /* userprog/exception.h */

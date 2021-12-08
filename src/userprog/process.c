@@ -32,14 +32,18 @@ static bool stack_init(int argc, char** argv, struct intr_frame* if_);
 /*
   Initialise a global list to store all of the pcbs
 */
-struct list pcb_list = LIST_INITIALIZER (pcb_list); 
+struct list pcb_list = LIST_INITIALIZER (pcb_list);
+
 struct lock pcb_list_lock;
 
+/* 
+  Structure used to store command line arguments and record the success of a process loading
+*/
 struct Args
 {
-  void* fn_copy;
-  bool success;
-  struct semaphore sema;
+  void* fn_copy;                     /* Page that stores command line arguments */
+  bool success;                      /* Records whether a process has loaded */
+  struct semaphore sema;             /* Semaphore - used so that parent process waits until its child loads successfully */
 };
 
 tid_t
@@ -80,13 +84,6 @@ process_execute (const char *file_name)
   return tid;
 }
 
-/* 
-  Function used to check if the stack pointer is decremented out of user space
-*/
-static bool check_stack_overflow (void *esp, unsigned long dcr) {
-  return ((char *) esp - dcr) >= ((char*) PHYS_BASE - PGSIZE);
-}
-
 static bool add_byte_to_stack (void **esp, uint8_t arg) {
   *esp = *esp - sizeof (uint8_t);
   *((uint8_t *)*esp) = arg;
@@ -120,7 +117,7 @@ start_process (void *args_ptr)
   struct intr_frame if_;
   bool success;
 
-    /* Initialise Supplemental Page Table of process */  
+  /* Initialise Supplemental Page Table of process */  
   hash_init (&thread_current ()->supp_page_table, &supp_hash, &supp_hash_compare, thread_current ());
 
   int file_size = strlen (whole_file) + 1;
@@ -168,7 +165,7 @@ start_process (void *args_ptr)
   sema_up (&args->sema);
 
   if (!success) 
-    exit (-1);
+    exit (EXIT_ERROR);
   
   asm volatile ("movl %0, %%esp; jmp intr_exit" : : "g" (&if_) : "memory");
   NOT_REACHED ();
@@ -271,13 +268,13 @@ process_wait (tid_t child_tid)
 
   if (!process_has_child (current_pcb, child_tid)) {
     lock_release (&pcb_list_lock);
-    return -1;
+    return EXIT_ERROR;
   }
 
   pcb *child_pcb = get_pcb_from_id (child_tid);
   if (child_pcb->has_been_waited_on) {
     lock_release (&pcb_list_lock);
-    return -1;
+    return EXIT_ERROR;
   }
   child_pcb->has_been_waited_on = true;
 
@@ -566,7 +563,6 @@ load (const char *file_name, void (**eip) (void), void **esp)
   success = true;
 
  done:
-  /* We arrive here whether the load is successful or not. */
   if (!success) {
     file_close (file);
   }
@@ -579,6 +575,8 @@ load (const char *file_name, void (**eip) (void), void **esp)
   return success;
 }
 
+
+
 /* load() helpers. */
 
 
@@ -654,7 +652,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
   while (read_bytes > 0 || zero_bytes > 0) 
     {
       /* Calculate how to fill this page.
-         We will read PAGE_READ_BYTES bytes from FILE
+         Reads PAGE_READ_BYTES bytes from FILE
          and zero the final PAGE_ZERO_BYTES bytes. */
       size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
       size_t page_zero_bytes = PGSIZE - page_read_bytes;
@@ -666,14 +664,17 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       
       
       if (old_entry_elem != NULL) {
-        /* Already an entry in the supplementary page table for this address */
+        /* 
+          An entry exists in the supplementary page table for this address.
+          Update its property to reflect changes of the overlapping segment. 
+        */
         supp_pte *old_entry = hash_entry (old_entry_elem, supp_pte, elem);
         old_entry->writable |= writable;
         if (old_entry->read_bytes < page_read_bytes) {
           old_entry->read_bytes = page_read_bytes;
           old_entry->zero_bytes = page_zero_bytes;
         }
-        /* Otherwise, the page already present contains more read data so no update is required */
+
       } else {
         supp_pte *entry = create_supp_pte (file, ofs, upage, page_read_bytes, page_zero_bytes, writable, DISK); 
         hash_insert (supp_page_table, &entry->elem);
@@ -719,7 +720,6 @@ setup_stack (void **esp)
   supp_pte *entry = hash_entry (entry_elem, supp_pte, elem);
   
   bool success = load_stack_page (entry);
-  //printf ("INITIAL STACK IS: %p\n", entry->addr);
 
   if (success) {
     *esp = PHYS_BASE;

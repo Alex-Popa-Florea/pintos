@@ -17,6 +17,19 @@
 #include "vm/share-table.h"
 #include "string.h"
 
+/*
+  The following macros are used to check access faults when
+  user programs try to write to the stack below the stack pointer
+
+  These are used to distinguish between stack accesses and
+  invalid accesses,
+*/
+
+/* 80x86 PUSH instruction may cause a page fault 4 bytes below the stack pointer */
+#define PUSH_LIMIT (4)              
+/* 80x86 PUSHA instruction may cause a page fault 32 bytes below the stack pointer */
+#define PUSHA_LIMIT (32)
+
 /* Number of page faults processed. */
 static long long page_fault_cnt;
 
@@ -25,6 +38,7 @@ static void page_fault (struct intr_frame *);
 static void print_page_fault (void *, bool, bool, bool);
 static bool load_page (supp_pte *);
 static bool load_mmap_page (supp_pte *);
+static bool load_swap_space_page (supp_pte *);
 static bool acquire_filesys_lock (bool);
 static bool release_filesys_lock (bool);
 static bool acquire_table_locks (bool);
@@ -107,7 +121,7 @@ kill (struct intr_frame *f)
       printf ("%s: dying due to interrupt %#04x (%s).\n",
               thread_name (), f->vec_no, intr_name (f->vec_no));
       intr_dump_frame (f);
-      exit (-1); 
+      exit (EXIT_ERROR); 
 
     case SEL_KCSEG:
       /* Kernel's code segment, which indicates a kernel bug.
@@ -164,8 +178,6 @@ page_fault (struct intr_frame *f)
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
 
-  //printf ("FAULTING FOR : %p, ROUNDED: %p\n", fault_addr, pg_round_down (fault_addr));
-
   /* 
    If page fault occurred because page is not present, 
    loads the page from the current thread's supplemental page table
@@ -178,35 +190,31 @@ page_fault (struct intr_frame *f)
 
       struct hash_elem *found_elem = hash_find (&t->supp_page_table, &fault_entry.elem);
       if (!found_elem) {
-        // No entry in the supplemental page table
         load_success = false;
       } else {
         supp_pte *entry = hash_entry (found_elem, supp_pte, elem);
+
+        /* 
+          Determine the source of supplemental page table entry to load from
+        */
         switch (entry->page_source)
         {
         case MMAP:
-          //printf ("LOADING mmap for entry: %p\n", entry->addr);
           load_success = load_page (entry);
           break;
         
         case STACK:
-          //printf ("LOADING stack for entry: %p\n", entry->addr);
           if (entry->is_in_swap_space) {
-            //printf ("from swap for entry: %p\n", entry->addr);
             load_success = load_swap_space_page (entry);
           } else {
-            //printf ("not from swap for entry: %p\n", entry->addr);
             load_success = load_stack_page (entry);
           }
           break;
 
         case DISK:
-          //printf ("LOADING disk for entry: %p\n", entry->addr);
           if (entry->is_in_swap_space) {
-            //printf ("from swap for entry: %p\n", entry->addr);
             load_success = load_swap_space_page (entry);
           } else {
-            //printf ("not from swap for entry: %p\n", entry->addr);
             load_success = load_page (entry);
           }
           break;
@@ -217,32 +225,30 @@ page_fault (struct intr_frame *f)
       }
   } 
 
-
-  /* Even if there is no entry in the supplemental page table, stack growth
-     is possible 
+  /* 
+    Consider stack growth 
+    This is possible even if no supplemental page entry was found 
   */
 
-  /* Checks the fault address is not outside the stack's allowed 8 MB */
+  /* 
+    Checks the fault address is not outside the stack's allowed 8 MB 
+  */
   bool not_overflow = PHYS_BASE - pg_round_down (fault_addr) <= (1 << 23);
 
-  //check underflow
-
   /* Checks the fault address is above the stack pointer, equal to the stack
-     pointer - 32 or equal to the stack pointer - 4
+     pointer - PUSHA_LIMIT or equal to the stack pointer - PUSH_LIMIT
   */ 
   bool valid_fault_address = (uint32_t*) fault_addr >= (uint32_t *) f->esp
-                              || (uint32_t*) fault_addr == (uint32_t *) (f->esp - 32)
-                              || (uint32_t*) fault_addr == (uint32_t *) (f->esp - 4);
-                              //collapse into one case
+                              || (uint32_t*) fault_addr == (uint32_t *) (f->esp - PUSHA_LIMIT)
+                              || (uint32_t*) fault_addr == (uint32_t *) (f->esp - PUSH_LIMIT);
 
   if (!load_success && not_overflow && valid_fault_address && is_user_vaddr (fault_addr)) {
     struct hash_elem *entry_elem = set_up_pte_for_stack (fault_addr);
     supp_pte *entry = hash_entry (entry_elem, supp_pte, elem);
-    //printf ("LOADING new stack for entry: %p\n", entry->addr);
     load_success = load_stack_page (entry);
   }
   if (!load_success) {
-    exit(-1);
+    exit (EXIT_ERROR);
   }
 }
 
@@ -256,15 +262,15 @@ print_page_fault (void *fault_addr, bool not_present, bool write, bool user)
               user ? "user" : "kernel");
 }
 
-
-
-
 bool 
 load_stack_page (supp_pte *entry) {
 
   bool table_held = false;
   table_held = acquire_table_locks (table_held);
 
+  /* 
+    Try to acquire an empty frame from the frame table
+  */
   frame_table_entry *new_frame = try_allocate_page (PAL_USER, entry);
   uint8_t *kpage = new_frame->page;
 
@@ -273,6 +279,9 @@ load_stack_page (supp_pte *entry) {
     return false;
   }
   
+  /* 
+    Try to install supplemental page table into frame 
+  */
   if (!install_page (entry->addr, kpage, entry->writable)) {
     free_frame_from_supp_pte (&entry->elem, thread_current ());
     release_table_locks (table_held);
@@ -297,10 +306,14 @@ entry_from_share_table (supp_pte *entry) {
 
   struct hash_elem *search_elem = hash_find (&share_table, &search_entry.elem);
   if (search_elem != NULL) {
-    /* Page has already been allocated so it can be shared */
+    /* 
+      Page exists in share table - already allocated so elligble for sharing 
+    */
     share_entry *found_entry = hash_entry (search_elem, share_entry, elem);
 
-    // Add to list of pages in frame
+    /*
+      Add to list of pages that share common frame
+    */
     entry->page_frame = found_entry->frame;
     list_push_back (&found_entry->sharing_ptes, &entry->share_elem);
 
@@ -327,8 +340,9 @@ load_page (supp_pte *entry) {
   table_held = acquire_table_locks (table_held);
 
   bool shareable = !entry->writable && entry->page_source == DISK;
-  /* Check the share table for read-only pages 
-     to see if there is already an entry */
+  /* 
+    Check for existing entry in share table for read-only pages  
+  */
   if (shareable) {
     if (entry_from_share_table (entry)) {
       release_table_locks (table_held);;
@@ -336,7 +350,9 @@ load_page (supp_pte *entry) {
     }
   }
 
-  /* Get a new page of memory. */
+  /*
+    Try to acquire a new page of memory. 
+  */
   frame_table_entry *new_frame;
 
   if (entry->page_source == MMAP) {
@@ -353,14 +369,18 @@ load_page (supp_pte *entry) {
     return false;
   }
   
-  /* Add the page to the process's address space. */
+  /* 
+    Add the page to the process's address space. 
+  */
   if (!install_page (entry->addr, kpage, entry->writable)) {
     free_frame_from_supp_pte (&entry->elem, thread_current ());
     release_table_locks (table_held);
     return false;
   }
 
-  /* Add the frame to the share table if readable */
+  /*
+    Add the frame to the share table if readable 
+  */
   if (shareable) {
     share_entry *new_share_entry = create_share_entry (entry, new_frame);
     hash_insert (&share_table, &new_share_entry->elem);
@@ -380,21 +400,28 @@ load_page (supp_pte *entry) {
     return false;
   }
 
-  /* Set the remaining bytes of the page to 0 */
-  memset (kpage + entry->read_bytes, 0, entry->zero_bytes);
+  /* 
+    Set the remaining bytes of the page to 0 
+  */
+  memset (kpage + entry->read_bytes, NULL, entry->zero_bytes);
   entry->page_frame = new_frame;
   release_table_locks (table_held);
   return true;
 }
 
-bool
+/* 
+  Loads an active page from a supplemental page table entry currently in swap space
+*/
+static bool
 load_swap_space_page (supp_pte *entry) {
 
   bool table_held = false;
   table_held = acquire_table_locks (table_held);
 
 
-  /* Get a new page of memory. */
+  /* 
+    Try to acquire a new page of memory.
+  */
   frame_table_entry *new_frame = try_allocate_page (PAL_USER, entry);
   uint8_t *kpage = new_frame->page;
 
@@ -403,13 +430,18 @@ load_swap_space_page (supp_pte *entry) {
     return false;
   }
 
-  /* Add the page to the process's address space. */
+  /* 
+    Add the page to the process's address space.
+  */
   if (!install_page (entry->addr, kpage, entry->writable)) {
     free_frame_from_supp_pte (&entry->elem, thread_current ());
     release_table_locks (table_held);
     return false; 
   }
 
+  /*
+    Retrieve data from swap space and store in KPAGE  
+  */
   retrieve_from_swap_space (entry, kpage);
   entry->is_in_swap_space = false;
   entry->page_frame = new_frame;
@@ -419,8 +451,8 @@ load_swap_space_page (supp_pte *entry) {
 
 
 /*
-  Acquires the file system lock of the current thread
-  Returns true if the lock is acquired
+  Acquires the file system lock of the current thread.
+  Returns true if the lock is acquired.
 */
 static bool
 acquire_filesys_lock (bool held) {
@@ -432,7 +464,8 @@ acquire_filesys_lock (bool held) {
 }
 
 /*
-  Releases the file system lock if the current thread currently holds it
+  Releases the file system lock if the current thread currently holds it.
+  Returns false if lock released.
 */
 static bool
 release_filesys_lock (bool held) {
@@ -444,8 +477,8 @@ release_filesys_lock (bool held) {
 }
 
 /*
-  Acquires the table locks of the current thread
-  Returns true if the locks are acquired
+  Acquires the table locks of the current thread.
+  Returns true if the locks are acquired.
 */
 static bool
 acquire_table_locks (bool held) {
@@ -458,7 +491,8 @@ acquire_table_locks (bool held) {
 
 
 /*
-  Releases the table locks if the current thread currently holds them
+  Releases the table locks if the current thread currently holds them.
+  Returns false if lock released.
 */
 static bool
 release_table_locks (bool held) {

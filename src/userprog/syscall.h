@@ -1,8 +1,8 @@
 #ifndef USERPROG_SYSCALL_H
 #define USERPROG_SYSCALL_H
 
-#include "lib/user/syscall.h"
 #include <list.h>
+#include "lib/user/syscall.h"
 #include "vm/supp-page-table.h"
 
 /* Current number of system call functions recognised in Pintos */
@@ -23,9 +23,9 @@ typedef struct
 */
 typedef struct
 {
-    supp_pte *entry;
-    mapid_t mapping;
-    struct list_elem mapped_elem;
+    supp_pte *entry;                     /* Supplemental Page Table entry corresponding to the mapping */
+    mapid_t mapping;                     /* ID of the mapping */
+    struct list_elem mapped_elem;        /* List elem - each thread contains a list of memory mapped files */
 } mapped_file;
 
 /*
@@ -135,7 +135,5 @@ mapid_t mmap (int fd, void *addr);
   System call that unmapps file of mapid mapping from memory.
 */
 void munmap (mapid_t mapping);
-
-void munmap_for_thread (mapid_t, struct thread *);
 
 #endif /* userprog/syscall.h */

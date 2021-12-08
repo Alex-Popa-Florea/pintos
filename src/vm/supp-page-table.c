@@ -2,7 +2,6 @@
 #include "threads/malloc.h"
 #include <debug.h>
 
-
 unsigned 
 supp_hash (const struct hash_elem *e, void *aux UNUSED) {
   const supp_pte *entry = hash_entry (e, supp_pte, elem);

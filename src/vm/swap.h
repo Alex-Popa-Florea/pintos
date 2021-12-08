@@ -29,10 +29,10 @@ extern struct hash swap_table;
   Struct for an entry in swap table
 */
 typedef struct {
-	supp_pte *supp_pte;           	   /* Supplemental Page table entry */
-	size_t index;                  /* Index of first block sector in device */
+	supp_pte *supp_pte;           /* Supplemental Page table entry */
+	size_t index;                 /* Index of first block sector in device */
 
-  struct hash_elem elem;         /* Hash table elem */
+  struct hash_elem elem;          /* Hash table elem */
 } swap_entry;
 
 /*
@@ -57,12 +57,8 @@ void initialise_swap_space (void);
 bool load_page_into_swap_space (supp_pte *, void *);
 
 /* 
-	Populates PAGE from swap space with data corresponding to 
-	supp_pte address ADDR
+	Populates EMPTY_PAGE with data from SUPP_ENTRY from swap space
 */
 void retrieve_from_swap_space (supp_pte *, void *);
-
-
-void print_swap_table (struct hash *h);
 
 #endif

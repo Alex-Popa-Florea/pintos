@@ -10,10 +10,15 @@
 #include "debug.h"
 
 /*
-  Type for the number which identifies an allocated page
+  Global list to track the pages which are occupied
 */
-typedef int frame_nr;
+extern struct list frame_table;
 
+
+/*
+  Global lock to ensure synchronized access to the frame table
+*/
+extern struct lock frame_table_lock;
 
 /*
   Struct to store an entry in the frame table 
@@ -29,21 +34,9 @@ typedef struct {
 
   /* Information needed for sharing */
   bool can_be_shared;       /* Records whether the frame is sharable */
-  void *creator;        /* Points to supp_pte that created the frame. Unused for shared frame */
+  void *creator;            /* Points to supp_pte that created the frame. Unused for shared frame */
 
 } frame_table_entry;
-
-
-/*
-  Global list to track the pages which are occupied
-*/
-extern struct list frame_table;
-
-
-/*
-  Lock to ensure synchronized access to the frame table
-*/
-extern struct lock frame_table_lock;
 
 
 /*
@@ -62,10 +55,6 @@ frame_table_entry *try_allocate_page (enum palloc_flags flags, void *entry);
 void evict (void);
 
 /*
-  Sets the inode and offset members of a frame table entry
-*/
-
-/*
   Frees the memory for all pages associated with a thread
 */
 void free_frame_table_entries_of_thread (struct thread *);
@@ -78,7 +67,6 @@ void free_frame_from_supp_pte (struct hash_elem *, void *);
 
 /*  
   Frame table and share table lock needs to be acquired and released at the same time
-
   The following functions are used to enforce this.
 */
 
