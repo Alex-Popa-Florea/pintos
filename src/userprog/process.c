@@ -298,8 +298,10 @@ process_exit (void)
   lock_acquire (&pcb_list_lock);
   pcb *current_pcb = get_pcb_from_id  (cur->tid);
   uint32_t *pd;
-  
-  lock_acquire (&file_system_lock);
+
+  if (!lock_held_by_current_thread (&file_system_lock)) {
+    lock_acquire (&file_system_lock);
+  }
 
   struct list *file_list = &cur->file_list;
 

@@ -222,12 +222,15 @@ page_fault (struct intr_frame *f)
   /* Checks the fault address is not outside the stack's allowed 8 MB */
   bool not_overflow = PHYS_BASE - pg_round_down (fault_addr) <= (1 << 23);
 
+  //check underflow
+
   /* Checks the fault address is above the stack pointer, equal to the stack
      pointer - 32 or equal to the stack pointer - 4
   */ 
   bool valid_fault_address = (uint32_t*) fault_addr >= (uint32_t *) f->esp
                               || (uint32_t*) fault_addr == (uint32_t *) (f->esp - 32)
                               || (uint32_t*) fault_addr == (uint32_t *) (f->esp - 4);
+                              //collapse into one case
 
   if (!load_success && not_overflow && valid_fault_address && is_user_vaddr (fault_addr)) {
     struct hash_elem *entry_elem = set_up_pte_for_stack (fault_addr);
@@ -236,8 +239,8 @@ page_fault (struct intr_frame *f)
     load_success = load_stack_page (entry);
   }
   if (!load_success) {
-    print_page_fault (fault_addr, not_present, write, user);
-    kill (f);
+    //print_page_fault (fault_addr, not_present, write, user);
+    exit(-1);
   }
 }
 
