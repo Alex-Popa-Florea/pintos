@@ -319,7 +319,7 @@ process_exit (void)
   /* Unmap all files that the process has mapped */
   struct list *mapped_list = &cur->mmapped_file_list;
   while (!list_empty (mapped_list)) {
-    e = list_pop_front (mapped_list);
+    e = list_begin (mapped_list);
     mapped_file *current_file = list_entry (e, mapped_file, mapped_elem);
     munmap (current_file->mapping);
   }

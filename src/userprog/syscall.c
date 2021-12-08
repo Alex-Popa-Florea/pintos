@@ -490,7 +490,7 @@ munmap_for_thread (mapid_t mapping, struct thread *given_thread) {
   }
 
   struct list *mapped_list = &given_thread->mmapped_file_list;
-  
+
   if (list_empty (mapped_list)) {
     return;
   }
