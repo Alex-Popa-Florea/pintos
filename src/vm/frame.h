@@ -10,26 +10,20 @@
 #include "debug.h"
 
 /*
-  Type for the number which identifies an allocated page
-*/
-typedef int frame_nr;
-
-
-/*
   Struct to store an entry in the frame table 
 */
 typedef struct {
   void *page;               /* The page where data is stored */                
   struct list_elem elem;    /* Elem to insert into frame table */
 
-  struct inode *inode;      /* Inode to find a share table entry */
-  off_t ofs;                /* Offset to find a share table entry */
 
   bool r_bit;               /* Reference bit */
 
   /* Information needed for sharing */
+  struct inode *inode;      /* Inode to find a share table entry */
+  off_t ofs;                /* Offset to find a share table entry */
   bool can_be_shared;       /* Records whether the frame is sharable */
-  void *creator;        /* Points to supp_pte that created the frame. Unused for shared frame */
+  void *creator;            /* Points to supp_pte that created the frame. Unused for shared frame */
 
 } frame_table_entry;
 

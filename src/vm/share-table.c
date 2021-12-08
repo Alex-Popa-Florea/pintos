@@ -4,6 +4,7 @@
 #include "threads/thread.h"
 #include "vm/supp-page-table.h"
 #include "filesys/file.h"
+#include "threads/interrupt.h"
 
 
 struct hash share_table;
@@ -46,7 +47,11 @@ bool
 share_hash_compare (const struct hash_elem *a, const struct hash_elem *b, void *aux UNUSED) {
   const share_entry *entryA = hash_entry (a,  share_entry, elem);
   const share_entry *entryB = hash_entry (b,  share_entry, elem);
-  
+
+  ASSERT (entryA != NULL);
+  ASSERT (entryA->frame != NULL);
+  ASSERT (entryB != NULL);
+  ASSERT (entryB->frame != NULL);
   struct inode *entryA_inode = entryA->frame->inode;
   struct inode *entryB_inode = entryB->frame->inode;
   off_t entryA_ofs = entryA->frame->ofs;
