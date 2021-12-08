@@ -242,7 +242,6 @@ page_fault (struct intr_frame *f)
     load_success = load_stack_page (entry);
   }
   if (!load_success) {
-    //print_page_fault (fault_addr, not_present, write, user);
     exit(-1);
   }
 }
@@ -411,7 +410,7 @@ load_swap_space_page (supp_pte *entry) {
     return false; 
   }
 
-  retrieve_from_swap_space (entry->addr, kpage);
+  retrieve_from_swap_space (entry, kpage);
   entry->is_in_swap_space = false;
   entry->page_frame = new_frame;
   release_table_locks (table_held);

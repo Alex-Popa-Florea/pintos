@@ -8,6 +8,7 @@
 #include "lib/kernel/hash.h"
 #include "threads/vaddr.h"
 #include "devices/block.h"
+#include "vm/supp-page-table.h"
 
 /* Calculates number of sectors in BLOCK_SWAP */
 #define NUM_SWAP_BLOCK_SECTORS (block_size (block_get_role (BLOCK_SWAP)))
@@ -28,7 +29,7 @@ extern struct hash swap_table;
   Struct for an entry in swap table
 */
 typedef struct {
-	void *supp_pte_addr;           /* Start address of page address space (key) */
+	supp_pte *supp_pte;           	   /* Supplemental Page table entry */
 	size_t index;                  /* Index of first block sector in device */
 
   struct hash_elem elem;         /* Hash table elem */
@@ -53,13 +54,13 @@ void initialise_swap_space (void);
 	Writes contents of PAGE to first available contiguous SECTORS_PER_PAGE 
 	sectors in BLOCK_SWAP
 */
-bool load_page_into_swap_space (uint8_t *, void *);
+bool load_page_into_swap_space (supp_pte *, void *);
 
 /* 
 	Populates PAGE from swap space with data corresponding to 
 	supp_pte address ADDR
 */
-void retrieve_from_swap_space (uint8_t *, void *);
+void retrieve_from_swap_space (supp_pte *, void *);
 
 
 void print_swap_table (struct hash *h);

@@ -3,6 +3,7 @@
 #include "threads/synch.h"
 #include <debug.h>
 #include <stdio.h>
+#include "vm/supp-page-table.h"
 
 struct lock swap_table_lock;
 struct lock bitmap_lock;
@@ -24,7 +25,7 @@ void initialise_swap_space (void) {
     lock_init (&bitmap_lock);
 }
 
-bool load_page_into_swap_space (uint8_t *supp_pte_addr, void *page) {
+bool load_page_into_swap_space (supp_pte *supp_entry, void *page) {
     lock_acquire (&bitmap_lock);
     lock_acquire (&swap_table_lock);
     /*
@@ -39,7 +40,7 @@ bool load_page_into_swap_space (uint8_t *supp_pte_addr, void *page) {
     }
     /* Insert first sector into swap table */
     swap_entry *new_entry = (swap_entry *) malloc (sizeof (swap_entry));
-    new_entry->supp_pte_addr = supp_pte_addr;
+    new_entry->supp_pte = supp_entry;
     new_entry->index = index;
     hash_insert (&swap_table, &new_entry->elem);
 
@@ -61,13 +62,13 @@ bool load_page_into_swap_space (uint8_t *supp_pte_addr, void *page) {
     return true;
 }
 
-void retrieve_from_swap_space (uint8_t *supp_pte_addr, void *empty_page) {
+void retrieve_from_swap_space (supp_pte *supp_entry, void *empty_page) {
     lock_acquire (&swap_table_lock);
 
     void *start_addr = empty_page;
     struct block *swap_block = block_get_role (BLOCK_SWAP);
     swap_entry entry;
-    entry.supp_pte_addr = supp_pte_addr;
+    entry.supp_pte = supp_entry;
 
     //printf ("Retrieve:\n");
     //print_swap_table (&swap_table);
@@ -78,6 +79,7 @@ void retrieve_from_swap_space (uint8_t *supp_pte_addr, void *empty_page) {
     */
     struct hash_elem *found_elem = hash_find (&swap_table, &entry.elem);
 
+    ASSERT(found_elem);
     
     size_t index = hash_entry (found_elem, swap_entry, elem)->index;
 
@@ -105,7 +107,7 @@ void retrieve_from_swap_space (uint8_t *supp_pte_addr, void *empty_page) {
 static unsigned 
 swap_hash (const struct hash_elem *e, void *aux UNUSED) {
   const swap_entry *entry = hash_entry (e, swap_entry, elem);
-  return hash_bytes (&entry->supp_pte_addr, sizeof entry->supp_pte_addr);
+  return hash_bytes (&entry->supp_pte, sizeof entry->supp_pte);
 }
 
 /* 
@@ -117,7 +119,13 @@ swap_hash_compare (const struct hash_elem *a, const struct hash_elem *b, void *a
   const swap_entry *entryA = hash_entry (a, swap_entry, elem);
   const swap_entry *entryB = hash_entry (b, swap_entry, elem);
 
-  return entryA->supp_pte_addr < entryB->supp_pte_addr;
+  if (entryA->supp_pte->thread->tid < entryB->supp_pte->thread->tid) {
+    return true;
+  } else if (entryA->supp_pte->thread->tid == entryB->supp_pte->thread->tid){
+    return entryA->supp_pte->addr < entryB->supp_pte->addr;
+  } else {
+    return false;
+  }
 }
 
 
@@ -130,6 +138,6 @@ print_swap_table (struct hash *h) {
   while (hash_next (&i))
   {
     swap_entry *entry = hash_entry (hash_cur (&i), swap_entry, elem);
-    printf ("--entry: Page: %p, Index: %d\n", entry->supp_pte_addr, entry->index);
+    //printf ("--entry: Page: %p, Index: %d\n", entry->supp_pte_addr, entry->index);
   }
 }

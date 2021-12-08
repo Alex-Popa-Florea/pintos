@@ -191,7 +191,7 @@ evict (void) {
             if (to_be_evicted_entry->page_source == STACK || pagedir_is_dirty (pd, hand->page)) {
               /* Stack pages and dirty pages are written to swap space */
               to_be_evicted_entry->is_in_swap_space = true;
-              load_page_into_swap_space (to_be_evicted_entry->addr, hand->page);
+              load_page_into_swap_space (to_be_evicted_entry, hand->page);
             }
             /* Remove the evicted page from the frame table */
             free_frame_from_supp_pte (&to_be_evicted_entry->elem, eviction_thread);
