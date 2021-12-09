@@ -196,26 +196,25 @@ page_fault (struct intr_frame *f)
         /* 
           Determine the source of supplemental page table entry to load from
         */
-        switch (entry->page_source)
-        {
-        case MMAP:
-          load_success = load_page_from_filesys (entry);
-          break;
-        
-        case STACK:
-          load_success = load_from_outside_filesys (entry);
-          break;
-
-        case DISK:
-          if (entry->is_in_swap_space) {
-            load_success = load_from_outside_filesys (entry);
-          } else {
+        switch (entry->page_source) {
+          case MMAP:
             load_success = load_page_from_filesys (entry);
-          }
-          break;
+            break;
+          
+          case STACK:
+            load_success = load_from_outside_filesys (entry);
+            break;
 
-        default:
-          break;
+          case DISK:
+            if (entry->is_in_swap_space) {
+              load_success = load_from_outside_filesys (entry);
+            } else {
+              load_success = load_page_from_filesys (entry);
+            }
+            break;
+
+          default:
+            break;
         }
       }
   } 
