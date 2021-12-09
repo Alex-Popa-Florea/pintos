@@ -36,9 +36,8 @@ static long long page_fault_cnt;
 static void kill (struct intr_frame *);
 static void page_fault (struct intr_frame *);
 static void print_page_fault (void *, bool, bool, bool);
-static bool load_page (supp_pte *);
-static bool load_mmap_page (supp_pte *);
-static bool load_swap_space_page (supp_pte *);
+static bool load_page_from_filesys (supp_pte *);
+
 static bool acquire_filesys_lock (bool);
 static bool release_filesys_lock (bool);
 static bool acquire_table_locks (bool);
@@ -200,22 +199,18 @@ page_fault (struct intr_frame *f)
         switch (entry->page_source)
         {
         case MMAP:
-          load_success = load_page (entry);
+          load_success = load_page_from_filesys (entry);
           break;
         
         case STACK:
-          if (entry->is_in_swap_space) {
-            load_success = load_swap_space_page (entry);
-          } else {
-            load_success = load_stack_page (entry);
-          }
+          load_success = load_from_outside_filesys (entry);
           break;
 
         case DISK:
           if (entry->is_in_swap_space) {
-            load_success = load_swap_space_page (entry);
+            load_success = load_from_outside_filesys (entry);
           } else {
-            load_success = load_page (entry);
+            load_success = load_page_from_filesys (entry);
           }
           break;
 
@@ -245,7 +240,7 @@ page_fault (struct intr_frame *f)
   if (!load_success && not_overflow && valid_fault_address && is_user_vaddr (fault_addr)) {
     struct hash_elem *entry_elem = set_up_pte_for_stack (fault_addr);
     supp_pte *entry = hash_entry (entry_elem, supp_pte, elem);
-    load_success = load_stack_page (entry);
+    load_success = load_from_outside_filesys (entry);
   }
   if (!load_success) {
     exit (EXIT_ERROR);
@@ -260,37 +255,6 @@ print_page_fault (void *fault_addr, bool not_present, bool write, bool user)
               not_present ? "not present" : "rights violation",
               write ? "writing" : "reading",
               user ? "user" : "kernel");
-}
-
-bool 
-load_stack_page (supp_pte *entry) {
-
-  bool table_held = false;
-  table_held = acquire_table_locks (table_held);
-
-  /* 
-    Try to acquire an empty frame from the frame table
-  */
-  frame_table_entry *new_frame = try_allocate_page (PAL_USER, entry);
-  uint8_t *kpage = new_frame->page;
-
-  if (!kpage) {
-    release_table_locks (table_held);
-    return false;
-  }
-  
-  /* 
-    Try to install supplemental page table into frame 
-  */
-  if (!install_page (entry->addr, kpage, entry->writable)) {
-    free_frame_from_supp_pte (&entry->elem, thread_current ());
-    release_table_locks (table_held);
-    return false;
-  }
-
-  entry->page_frame = new_frame;
-  release_table_locks (table_held);
-  return true;
 }
 
 
@@ -334,7 +298,7 @@ entry_from_share_table (supp_pte *entry) {
   inserts if not present. Returns true
 */
 static bool
-load_page (supp_pte *entry) {
+load_page_from_filesys (supp_pte *entry) {
 
   bool table_held = false;
   table_held = acquire_table_locks (table_held);
@@ -409,46 +373,45 @@ load_page (supp_pte *entry) {
   return true;
 }
 
-/* 
-  Loads an active page from a supplemental page table entry currently in swap space
-*/
-static bool
-load_swap_space_page (supp_pte *entry) {
+
+bool 
+load_from_outside_filesys (supp_pte *entry) {
 
   bool table_held = false;
   table_held = acquire_table_locks (table_held);
 
-
   /* 
-    Try to acquire a new page of memory.
+    Try to acquire an empty frame from the frame table
   */
   frame_table_entry *new_frame = try_allocate_page (PAL_USER, entry);
   uint8_t *kpage = new_frame->page;
 
-  if (kpage == NULL) {
+  if (!kpage) {
     release_table_locks (table_held);
     return false;
   }
-
+  
   /* 
-    Add the page to the process's address space.
+    Try to install supplemental page table into frame 
   */
   if (!install_page (entry->addr, kpage, entry->writable)) {
     free_frame_from_supp_pte (&entry->elem, thread_current ());
     release_table_locks (table_held);
-    return false; 
+    return false;
   }
 
-  /*
-    Retrieve data from swap space and store in KPAGE  
-  */
-  retrieve_from_swap_space (entry, kpage);
-  entry->is_in_swap_space = false;
+  if (entry->is_in_swap_space) {
+    /*
+      Retrieve data from swap space and store in KPAGE  
+    */
+    retrieve_from_swap_space (entry, kpage);
+    entry->is_in_swap_space = false;
+  }
+
   entry->page_frame = new_frame;
   release_table_locks (table_held);
   return true;
 }
-
 
 /*
   Acquires the file system lock of the current thread.

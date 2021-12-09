@@ -1,6 +1,7 @@
 #include "supp-page-table.h"
 #include "threads/malloc.h"
 #include <debug.h>
+#include "vm/swap.h"
 
 unsigned 
 supp_hash (const struct hash_elem *e, void *aux UNUSED) {
@@ -18,8 +19,21 @@ supp_hash_compare (const struct hash_elem *a, const struct hash_elem *b, void *a
 
 void 
 supp_destroy (struct hash_elem *e, void *aux UNUSED) {
-  supp_pte *entry = hash_entry (e, supp_pte, elem);
-  free (entry);
+
+  supp_pte *supp_entry = hash_entry (e, supp_pte, elem);
+
+  free_frame_from_supp_pte (e, thread_current ());
+
+  swap_entry search_entry;
+  search_entry.supp_pte = supp_entry;
+  struct hash_elem *to_delete_swap_elem = hash_find (&swap_table, &search_entry.elem);
+  if (to_delete_swap_elem != NULL) {
+    swap_entry *to_delete_swap_entry = hash_entry (to_delete_swap_elem, swap_entry, elem);
+    hash_delete (&swap_table, to_delete_swap_elem);
+    free (to_delete_swap_entry);
+  }
+
+  free (supp_entry);
 }
 
 supp_pte *

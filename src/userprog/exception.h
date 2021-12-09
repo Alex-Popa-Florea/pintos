@@ -16,8 +16,9 @@ void exception_init (void);
 void exception_print_stats (void);
 
 /*
-  Loads a stack page from a supplemental page table entry into an active page
+  Loads a stack page or page from swap space corresponding to 
+  a supplemental page table entry into an active page
 */
-bool load_stack_page (supp_pte *);
+bool load_from_outside_filesys (supp_pte *);
 
 #endif /* userprog/exception.h */

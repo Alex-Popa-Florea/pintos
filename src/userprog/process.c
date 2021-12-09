@@ -24,6 +24,7 @@
 #include "devices/timer.h"
 #include "vm/frame.h"
 #include "userprog/exception.h"
+#include "vm/swap.h"
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
@@ -323,10 +324,15 @@ process_exit (void)
     munmap (current_file->mapping);
   }
 
-  /* Deallocates the frame table entries corresponding to the thread */
-  free_frame_table_entries_of_thread (cur);
+  lock_tables ();
+
+  lock_acquire (&swap_table_lock);
 
   hash_destroy (&cur->supp_page_table, &supp_destroy);
+
+  lock_release (&swap_table_lock);
+
+  release_tables ();
 
   /* When a process exits, free all its child processes which have terminated */
   for (e = list_begin (&pcb_list); e != list_end (&pcb_list);) {
@@ -719,7 +725,7 @@ setup_stack (void **esp)
 
   supp_pte *entry = hash_entry (entry_elem, supp_pte, elem);
   
-  bool success = load_stack_page (entry);
+  bool success = load_from_outside_filesys (entry);
 
   if (success) {
     *esp = PHYS_BASE;

@@ -55,11 +55,6 @@ frame_table_entry *try_allocate_page (enum palloc_flags flags, void *entry);
 void evict (void);
 
 /*
-  Frees the memory for all pages associated with a thread
-*/
-void free_frame_table_entries_of_thread (struct thread *);
-
-/*
   Frees the given page in a thread's supplemental page table 
   and its corresponding frame table entry
 */
