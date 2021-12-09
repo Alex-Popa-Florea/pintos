@@ -176,8 +176,8 @@ evict (void) {
               mapped_file *map_entry = list_entry (e, mapped_file, mapped_elem);
               if (map_entry->entry->page_frame->page == hand->page) { 
 
-                lock_acquire (&file_system_lock);
-                
+                bool filesys_held = acquire_filesys_lock ();
+
                 if (pagedir_is_dirty (eviction_thread->pagedir, to_be_evicted_entry->addr)) {
                   file_write_at (to_be_evicted_entry->file, to_be_evicted_entry->page_frame->page, to_be_evicted_entry->read_bytes, to_be_evicted_entry->ofs);
                 }
@@ -190,7 +190,8 @@ evict (void) {
                 list_remove (e);
                 free (map_entry);
                 
-                lock_release (&file_system_lock);
+                filesys_held = release_filesys_lock (filesys_held);
+
                 break;
               }
             }
@@ -303,4 +304,22 @@ void
 release_tables (void) {
   lock_release (&share_table_lock);
   lock_release (&frame_table_lock);
+}
+
+bool
+acquire_filesys_lock () {
+  if (!lock_held_by_current_thread (&file_system_lock)) {
+    lock_acquire (&file_system_lock);
+    return true;
+  }
+  return false;
+}
+
+bool
+release_filesys_lock (bool held) {
+  if (held) {
+    held = false;
+    lock_release (&file_system_lock);
+  }
+  return held;
 }

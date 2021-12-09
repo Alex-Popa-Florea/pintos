@@ -38,9 +38,7 @@ static void page_fault (struct intr_frame *);
 static void print_page_fault (void *, bool, bool, bool);
 static bool load_page_from_filesys (supp_pte *);
 
-static bool acquire_filesys_lock (bool);
-static bool release_filesys_lock (bool);
-static bool acquire_table_locks (bool);
+static bool acquire_table_locks (void);
 static bool release_table_locks (bool);
 
 
@@ -299,8 +297,7 @@ entry_from_share_table (supp_pte *entry) {
 static bool
 load_page_from_filesys (supp_pte *entry) {
 
-  bool table_held = false;
-  table_held = acquire_table_locks (table_held);
+  bool table_held = acquire_table_locks ();
 
   bool shareable = !entry->writable && entry->page_source == DISK;
   /* 
@@ -349,8 +346,7 @@ load_page_from_filesys (supp_pte *entry) {
     hash_insert (&share_table, &new_share_entry->elem);
   }
 
-  bool held = false;
-  held = acquire_filesys_lock (held);
+  bool held = acquire_filesys_lock ();
 
   file_seek (entry->file, entry->ofs);
   off_t bytes_read = file_read (entry->file, kpage, entry->read_bytes);
@@ -376,8 +372,7 @@ load_page_from_filesys (supp_pte *entry) {
 bool 
 load_from_outside_filesys (supp_pte *entry) {
 
-  bool table_held = false;
-  table_held = acquire_table_locks (table_held);
+  bool table_held = acquire_table_locks ();
 
   /* 
     Try to acquire an empty frame from the frame table
@@ -412,43 +407,18 @@ load_from_outside_filesys (supp_pte *entry) {
   return true;
 }
 
-/*
-  Acquires the file system lock of the current thread.
-  Returns true if the lock is acquired.
-*/
-static bool
-acquire_filesys_lock (bool held) {
-  if (!lock_held_by_current_thread (&file_system_lock)) {
-    lock_acquire (&file_system_lock);
-    held = true;
-  }
-  return held;
-}
-
-/*
-  Releases the file system lock if the current thread currently holds it.
-  Returns false if lock released.
-*/
-static bool
-release_filesys_lock (bool held) {
-  if (held) {
-    held = false;
-    lock_release (&file_system_lock);
-  }
-  return held;
-}
 
 /*
   Acquires the table locks of the current thread.
   Returns true if the locks are acquired.
 */
 static bool
-acquire_table_locks (bool held) {
+acquire_table_locks () {
   if (!lock_held_by_current_thread (&frame_table_lock)) {
     lock_tables ();
-    held = true;
+    return true;
   }
-  return held;
+  return false;
 }
 
 
