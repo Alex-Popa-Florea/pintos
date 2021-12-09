@@ -178,7 +178,7 @@ evict (void) {
 
                 bool filesys_held = acquire_filesys_lock ();
 
-                if (pagedir_is_dirty (eviction_thread->pagedir, to_be_evicted_entry->addr)) {
+                if (pagedir_is_dirty (pd, to_be_evicted_entry->addr)) {
                   file_write_at (to_be_evicted_entry->file, to_be_evicted_entry->page_frame->page, to_be_evicted_entry->read_bytes, to_be_evicted_entry->ofs);
                 }
 
