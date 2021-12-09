@@ -23,8 +23,6 @@ static bool check_page_access_bit (struct list *, frame_table_entry *);
 static struct list_elem *next_frame_table_elem (struct list_elem *e);
 static struct list_elem *prev_frame_table_elem (struct list_elem *e);
 
-static struct list_elem *remove_frame_table_elem (struct list_elem *e);
-
 void 
 init_frame_table (void) {
   list_init (&frame_table);
@@ -176,8 +174,6 @@ evict (void) {
               mapped_file *map_entry = list_entry (e, mapped_file, mapped_elem);
               if (map_entry->entry->page_frame->page == hand->page) { 
 
-                bool filesys_held = acquire_filesys_lock ();
-
                 if (pagedir_is_dirty (pd, to_be_evicted_entry->addr)) {
                   file_write_at (to_be_evicted_entry->file, to_be_evicted_entry->page_frame->page, to_be_evicted_entry->read_bytes, to_be_evicted_entry->ofs);
                 }
@@ -189,8 +185,6 @@ evict (void) {
                     
                 list_remove (e);
                 free (map_entry);
-                
-                filesys_held = release_filesys_lock (filesys_held);
 
                 break;
               }
@@ -280,20 +274,6 @@ prev_frame_table_elem (struct list_elem *e) {
   return prev;
 }
 
-/*
-  Removes an element for a frame table entry and returns the next one, 
-  looping around from the end to the start of the list
-*/
-static struct list_elem *
-remove_frame_table_elem (struct list_elem *e) {
-  struct list_elem *next = list_remove (e);
-  if (next == list_end (&frame_table)) {
-    next = list_begin (&frame_table);
-  }
-  return next;
-}
-
-
 void
 lock_tables (void) {
   lock_acquire (&frame_table_lock);
@@ -304,22 +284,4 @@ void
 release_tables (void) {
   lock_release (&share_table_lock);
   lock_release (&frame_table_lock);
-}
-
-bool
-acquire_filesys_lock () {
-  if (!lock_held_by_current_thread (&file_system_lock)) {
-    lock_acquire (&file_system_lock);
-    return true;
-  }
-  return false;
-}
-
-bool
-release_filesys_lock (bool held) {
-  if (held) {
-    held = false;
-    lock_release (&file_system_lock);
-  }
-  return held;
 }

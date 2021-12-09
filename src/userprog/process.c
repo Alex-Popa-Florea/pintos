@@ -28,7 +28,7 @@
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
-static bool stack_init(int argc, char** argv, struct intr_frame* if_);
+static bool stack_init (int argc, char** argv, struct intr_frame* if_);
 
 /*
   Initialise a global list to store all of the pcbs
@@ -452,9 +452,9 @@ struct Elf32_Phdr
 
 static bool setup_stack (void **esp);
 static bool validate_segment (const struct Elf32_Phdr *, struct file *);
-static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
-                          uint32_t read_bytes, uint32_t zero_bytes,
-                          bool writable);
+static bool setup_supp_ptes (struct file *file, off_t ofs, uint8_t *upage,
+                             uint32_t read_bytes, uint32_t zero_bytes,
+                             bool writable);
 
 /* Loads an ELF executable from FILE_NAME into the current thread.
    Stores the executable's entry point into *EIP
@@ -470,8 +470,8 @@ load (const char *file_name, void (**eip) (void), void **esp)
   bool success = false;
   int i;
 
-  lock_tables ();
   lock_acquire (&file_system_lock);
+  lock_tables ();
 
   /* Allocate and activate page directory. */
   t->pagedir = pagedir_create ();
@@ -549,7 +549,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
                   read_bytes = 0;
                   zero_bytes = ROUND_UP (page_offset + phdr.p_memsz, PGSIZE);
                 }
-              if (!load_segment (file, file_page, (void *) mem_page,
+              if (!setup_supp_ptes (file, file_page, (void *) mem_page,
                                  read_bytes, zero_bytes, writable))
                 goto done;
             }
@@ -576,8 +576,8 @@ load (const char *file_name, void (**eip) (void), void **esp)
     t->executable_file = file;
     file_deny_write (file);
   }
-  lock_release (&file_system_lock);
   release_tables ();
+  lock_release (&file_system_lock);
   return success;
 }
 
@@ -631,7 +631,8 @@ validate_segment (const struct Elf32_Phdr *phdr, struct file *file)
   return true;
 }
 
-/* Loads a segment starting at offset OFS in FILE at address
+/* Creates the supplemental page table entries for the process from
+   which to later load frames, starting at offset OFS in FILE at address
    UPAGE.  In total, READ_BYTES + ZERO_BYTES bytes of virtual
    memory are initialized, as follows:
 
@@ -647,14 +648,13 @@ validate_segment (const struct Elf32_Phdr *phdr, struct file *file)
    or disk read error occurs. 
 */
 static bool
-load_segment (struct file *file, off_t ofs, uint8_t *upage,
+setup_supp_ptes (struct file *file, off_t ofs, uint8_t *upage,
               uint32_t read_bytes, uint32_t zero_bytes, bool writable) 
 {
   ASSERT ((read_bytes + zero_bytes) % PGSIZE == 0);
   ASSERT (pg_ofs (upage) == 0);
   ASSERT (ofs % PGSIZE == 0);
 
-  file_seek (file, ofs);
   while (read_bytes > 0 || zero_bytes > 0) 
     {
       /* Calculate how to fill this page.
@@ -683,6 +683,9 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 
       } else {
         supp_pte *entry = create_supp_pte (file, ofs, upage, page_read_bytes, page_zero_bytes, writable, DISK); 
+        if (entry == NULL) {
+          return false;
+        }
         hash_insert (supp_page_table, &entry->elem);
       }
 

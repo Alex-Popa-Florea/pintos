@@ -75,16 +75,4 @@ void lock_tables (void);
 */
 void release_tables (void);
 
-/*
-  Acquires the file system lock of the current thread.
-  Returns true if the lock is acquired.
-*/
-bool acquire_filesys_lock (void);
-
-/*
-  Releases the file system lock if the current thread currently holds it.
-  Returns false if lock released.
-*/
-bool release_filesys_lock (bool);
-
 #endif 

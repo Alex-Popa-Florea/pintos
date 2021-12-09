@@ -425,6 +425,8 @@ mmap (int fd, void *addr) {
     return MAP_FAILED;
   }
 
+  lock_tables ();
+
   int page_count = length / PGSIZE + 1;
   for (int i = 0; i < page_count; i++) {
     void *page = addr + PGSIZE * i;
@@ -433,6 +435,7 @@ mmap (int fd, void *addr) {
     old_entry_query.addr = page;
     struct hash_elem *old_entry_elem = hash_find (supp_page_table, &old_entry_query.elem);
     if (old_entry_elem != NULL) {
+      release_tables ();
       lock_release (&file_system_lock);
       return MAP_FAILED;
     }
@@ -449,6 +452,8 @@ mmap (int fd, void *addr) {
 
     mapped_file *new_mapped_file = (mapped_file *) malloc (sizeof (mapped_file));
     if (!new_mapped_file) {
+      release_tables ();
+      lock_release (&file_system_lock);
       return MAP_FAILED;
     }
 
@@ -465,6 +470,7 @@ mmap (int fd, void *addr) {
     ofs += PGSIZE;
   }
 
+  release_tables ();
   lock_release (&file_system_lock);
 
   thread_current ()->current_mmapped_id++;
@@ -481,9 +487,11 @@ munmap_wrapper (int *addr) {
 
 void 
 munmap (mapid_t mapping) {
+  lock_acquire (&file_system_lock);
   lock_tables ();
   munmap_for_thread (mapping, thread_current ());
   release_tables ();
+  lock_release (&file_system_lock);
 }
 
 /* Unmapps file of mapid mapping from memory of given thread  */
@@ -500,8 +508,6 @@ munmap_for_thread (mapid_t mapping, struct thread *given_thread) {
   if (list_empty (mapped_list)) {
     return;
   }
-
-  lock_acquire (&file_system_lock);
 
   struct list_elem *e;
   for (e = list_begin (mapped_list); e != list_end (mapped_list);) {
@@ -523,7 +529,6 @@ munmap_for_thread (mapid_t mapping, struct thread *given_thread) {
       e = list_next (e);
     }
   }
-  lock_release (&file_system_lock);
 }
 
 

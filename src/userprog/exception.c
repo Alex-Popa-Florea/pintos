@@ -35,13 +35,14 @@ static long long page_fault_cnt;
 
 static void kill (struct intr_frame *);
 static void page_fault (struct intr_frame *);
-static void print_page_fault (void *, bool, bool, bool);
+
 static bool load_page_from_filesys (supp_pte *);
 
 static bool acquire_table_locks (void);
 static bool release_table_locks (bool);
 
-
+static bool acquire_filesys_lock (void);
+static bool release_filesys_lock (bool);
 /* Registers handlers for interrupts that can be caused by user
    programs.
 
@@ -175,6 +176,8 @@ page_fault (struct intr_frame *f)
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
 
+  bool held = acquire_filesys_lock ();
+
   /* 
    If page fault occurred because page is not present, 
    loads the page from the current thread's supplemental page table
@@ -239,21 +242,13 @@ page_fault (struct intr_frame *f)
     supp_pte *entry = hash_entry (entry_elem, supp_pte, elem);
     load_success = load_from_outside_filesys (entry);
   }
+
+  release_filesys_lock (held);
+  
   if (!load_success) {
     exit (EXIT_ERROR);
   }
 }
-
-static void 
-print_page_fault (void *fault_addr, bool not_present, bool write, bool user)
-{
-   printf ("Page fault at %p: %s error %s page in %s context.\n",
-              fault_addr,
-              not_present ? "not present" : "rights violation",
-              write ? "writing" : "reading",
-              user ? "user" : "kernel");
-}
-
 
 static bool
 entry_from_share_table (supp_pte *entry) {
@@ -346,12 +341,8 @@ load_page_from_filesys (supp_pte *entry) {
     hash_insert (&share_table, &new_share_entry->elem);
   }
 
-  bool held = acquire_filesys_lock ();
-
   file_seek (entry->file, entry->ofs);
   off_t bytes_read = file_read (entry->file, kpage, entry->read_bytes);
-
-  held = release_filesys_lock (held);
 
   if (bytes_read != (off_t) entry->read_bytes) {
     free_frame_from_supp_pte (&entry->elem, thread_current ());
@@ -431,6 +422,32 @@ release_table_locks (bool held) {
   if (held) {
     held = false;
     release_tables ();
+  }
+  return held;
+}
+
+/*
+  Acquires the file system lock of the current thread.
+  Returns true if the lock is acquired.
+*/
+static bool
+acquire_filesys_lock () {
+  if (!lock_held_by_current_thread (&file_system_lock)) {
+    lock_acquire (&file_system_lock);
+    return true;
+  }
+  return false;
+}
+
+/*
+  Releases the file system lock if the current thread currently holds it.
+  Returns false if lock released.
+*/
+static bool
+release_filesys_lock (bool held) {
+  if (held) {
+    held = false;
+    lock_release (&file_system_lock);
   }
   return held;
 }
