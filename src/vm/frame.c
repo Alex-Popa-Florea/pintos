@@ -35,14 +35,14 @@ init_frame_table (void) {
   supplemental page table entry
 */
 static frame_table_entry *
-create_frame (void *page, supp_pte *entry) {
+create_frame (void *kpage, supp_pte *entry) {
   frame_table_entry *new_frame = (frame_table_entry *) malloc (sizeof (frame_table_entry));
   if (new_frame == NULL) {
     return NULL;
   }
   
   new_frame->creator = entry;
-  new_frame->page = page;
+  new_frame->kpage = kpage;
   new_frame->r_bit = false;
   new_frame->inode = file_get_inode (entry->file);
   new_frame->ofs = entry->ofs;
@@ -83,11 +83,11 @@ check_page_access_bit (struct list *entries, frame_table_entry *hand) {
     struct thread *sharing_thread = entry->thread;
     uint32_t *pd = sharing_thread->pagedir;
 
-    if (pagedir_is_accessed (pd, entry->addr)) {
+    if (pagedir_is_accessed (pd, entry->uaddr)) {
       /* Set the reference bit to true because the page has been accessed */
       hand->r_bit = true;
       is_accessed = true;
-      pagedir_set_accessed (pd, entry->addr, false);
+      pagedir_set_accessed (pd, entry->uaddr, false);
     }
   }
 
@@ -105,7 +105,7 @@ evict_sharing_entries (share_entry *found_share_entry, frame_table_entry *f) {
   while (!list_empty (entries)) {
     e = list_pop_front (entries);
     supp_pte *entry = list_entry (e, supp_pte, share_elem);
-    pagedir_clear_page (entry->thread->pagedir, entry->addr);
+    pagedir_clear_page (entry->thread->pagedir, entry->uaddr);
     entry->page_frame = NULL;
   }
 
@@ -116,7 +116,7 @@ evict_sharing_entries (share_entry *found_share_entry, frame_table_entry *f) {
   hash_delete (&share_table, &found_share_entry->elem);
   list_remove (&f->elem);
 
-  palloc_free_page (f->page);
+  palloc_free_page (f->kpage);
   free (f);
   free (found_share_entry);
 }
@@ -157,10 +157,10 @@ evict (void) {
       struct thread *eviction_thread = to_be_evicted_entry->thread;
       uint32_t *pd = eviction_thread->pagedir;
 
-      if (pagedir_is_accessed (pd, to_be_evicted_entry->addr)) {
+      if (pagedir_is_accessed (pd, to_be_evicted_entry->uaddr)) {
         /* Set the reference bit to true because the page has been accessed */
         hand->r_bit = true;
-        pagedir_set_accessed (pd, to_be_evicted_entry->addr, false);
+        pagedir_set_accessed (pd, to_be_evicted_entry->uaddr, false);
       } else {
         if (hand->r_bit == false) {
 
@@ -172,10 +172,10 @@ evict (void) {
 
             for (e = list_begin (mapped_list); e != list_end (mapped_list); e = list_next (e)) {
               mapped_file *map_entry = list_entry (e, mapped_file, mapped_elem);
-              if (map_entry->entry->page_frame->page == hand->page) { 
+              if (map_entry->entry->page_frame->kpage == hand->kpage) { 
 
-                if (pagedir_is_dirty (pd, to_be_evicted_entry->addr)) {
-                  file_write_at (to_be_evicted_entry->file, to_be_evicted_entry->page_frame->page, to_be_evicted_entry->read_bytes, to_be_evicted_entry->ofs);
+                if (pagedir_is_dirty (pd, to_be_evicted_entry->uaddr)) {
+                  file_write_at (to_be_evicted_entry->file, to_be_evicted_entry->page_frame->kpage, to_be_evicted_entry->read_bytes, to_be_evicted_entry->ofs);
                 }
 
                 free_frame_from_supp_pte (&to_be_evicted_entry->elem, eviction_thread);
@@ -190,10 +190,10 @@ evict (void) {
               }
             }
           } else {
-            if (to_be_evicted_entry->page_source == STACK || pagedir_is_dirty (pd, hand->page)) {
+            if (to_be_evicted_entry->page_source == STACK || pagedir_is_dirty (pd, hand->kpage)) {
               /* Stack pages and dirty pages are written to swap space */
               to_be_evicted_entry->is_in_swap_space = true;
-              load_page_into_swap_space (to_be_evicted_entry, hand->page);
+              load_page_into_swap_space (to_be_evicted_entry, hand->kpage);
             }
             /* Remove the evicted page from the frame table */
             free_frame_from_supp_pte (&to_be_evicted_entry->elem, eviction_thread);
@@ -214,7 +214,7 @@ void
 free_frame_from_supp_pte (struct hash_elem *e, void *aux) {
   struct thread *t = (struct thread *) aux;
   supp_pte *entry = hash_entry (e, supp_pte, elem);
-  pagedir_clear_page (t->pagedir, entry->addr);
+  pagedir_clear_page (t->pagedir, entry->uaddr);
   frame_table_entry *f = entry->page_frame;
 
   if (f != NULL) {
@@ -233,7 +233,7 @@ free_frame_from_supp_pte (struct hash_elem *e, void *aux) {
         struct hash_elem *deleted = hash_delete (&share_table, &found_share_entry->elem);
         list_remove (&f->elem);
         entry->page_frame = NULL;
-        palloc_free_page (f->page);
+        palloc_free_page (f->kpage);
         free (f);
         ASSERT(deleted);
         free (found_share_entry);
@@ -244,7 +244,7 @@ free_frame_from_supp_pte (struct hash_elem *e, void *aux) {
       }
       list_remove (&f->elem);
       entry->page_frame = NULL;
-      palloc_free_page (f->page);
+      palloc_free_page (f->kpage);
       free (f);
     }
     

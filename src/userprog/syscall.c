@@ -432,7 +432,7 @@ mmap (int fd, void *addr) {
     void *page = addr + PGSIZE * i;
     struct hash *supp_page_table = &thread_current ()->supp_page_table;
     supp_pte old_entry_query;
-    old_entry_query.addr = page;
+    old_entry_query.uaddr = page;
     struct hash_elem *old_entry_elem = hash_find (supp_page_table, &old_entry_query.elem);
     if (old_entry_elem != NULL) {
       release_tables ();
@@ -514,8 +514,8 @@ munmap_for_thread (mapid_t mapping, struct thread *given_thread) {
     mapped_file *current_mapped_file = list_entry (e, mapped_file, mapped_elem);
     if (current_mapped_file->mapping == mapping) {
       supp_pte *entry = current_mapped_file->entry;
-      if (pagedir_is_dirty (given_thread->pagedir, entry->addr)) {
-        file_write_at (entry->file, entry->page_frame->page, entry->read_bytes, entry->ofs);
+      if (pagedir_is_dirty (given_thread->pagedir, entry->uaddr)) {
+        file_write_at (entry->file, entry->page_frame->kpage, entry->read_bytes, entry->ofs);
       }
 
       free_frame_from_supp_pte (&entry->elem, given_thread);
@@ -601,7 +601,7 @@ verify_address (const void *vaddr) {
   /* Search for an entry in the supplemental page table */
   struct hash *supp_page_table = &thread_current ()->supp_page_table;
   supp_pte old_entry_query;
-  old_entry_query.addr = pg_round_down (vaddr);
+  old_entry_query.uaddr = pg_round_down (vaddr);
   struct hash_elem *old_entry_elem = hash_find (supp_page_table, &old_entry_query.elem);
   
   if (!old_entry_elem) {

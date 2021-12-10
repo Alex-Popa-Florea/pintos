@@ -17,13 +17,12 @@ enum source {
   Struct for an entry in a supplemental page table, a hash table
 */
 typedef struct {
-  uint8_t *addr;                      /* Base address of the page (key) */
+  uint8_t *uaddr;                      /* Base address of the page (key) */
   struct file *file;                  /* File storing the relevent data for process */
   off_t ofs;                          /* Offset in the file for current page */ 
   uint32_t read_bytes;                /* No. of bytes that must be read to initialise page */
   uint32_t zero_bytes;                /* Bytes to be zeroed in virtual memory */
   bool writable;                      /* Records if page should be writable or read-only */
-  bool is_dirty;                      /* Records if a page has been modified, and hence needs writing to disk */
   enum source page_source;            /* Records the source of the page */
   bool is_in_swap_space;              /* Records if a page is in swap */
   

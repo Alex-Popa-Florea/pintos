@@ -186,7 +186,7 @@ page_fault (struct intr_frame *f)
   if (not_present && is_user_vaddr (fault_addr)) {
       struct thread *t = thread_current ();
       supp_pte fault_entry;
-      fault_entry.addr = pg_round_down (fault_addr);
+      fault_entry.uaddr = pg_round_down (fault_addr);
 
       struct hash_elem *found_elem = hash_find (&t->supp_page_table, &fault_entry.elem);
       if (!found_elem) {
@@ -274,7 +274,7 @@ entry_from_share_table (supp_pte *entry) {
     list_push_back (&found_entry->sharing_ptes, &entry->share_elem);
 
 
-    if (!install_page (entry->addr, found_entry->frame->page, entry->writable)) {
+    if (!install_page (entry->uaddr, found_entry->frame->kpage, entry->writable)) {
       return false;
     }
 
@@ -317,7 +317,7 @@ load_page_from_filesys (supp_pte *entry) {
   }
 
 
-  uint8_t *kpage = new_frame->page;
+  uint8_t *kpage = new_frame->kpage;
 
   if (kpage == NULL) {
     release_table_locks (table_held);
@@ -327,7 +327,7 @@ load_page_from_filesys (supp_pte *entry) {
   /* 
     Add the page to the process's address space. 
   */
-  if (!install_page (entry->addr, kpage, entry->writable)) {
+  if (!install_page (entry->uaddr, kpage, entry->writable)) {
     free_frame_from_supp_pte (&entry->elem, thread_current ());
     release_table_locks (table_held);
     return false;
@@ -369,7 +369,7 @@ load_from_outside_filesys (supp_pte *entry) {
     Try to acquire an empty frame from the frame table
   */
   frame_table_entry *new_frame = try_allocate_page (PAL_USER, entry);
-  uint8_t *kpage = new_frame->page;
+  uint8_t *kpage = new_frame->kpage;
 
   if (!kpage) {
     release_table_locks (table_held);
@@ -379,7 +379,7 @@ load_from_outside_filesys (supp_pte *entry) {
   /* 
     Try to install supplemental page table into frame 
   */
-  if (!install_page (entry->addr, kpage, entry->writable)) {
+  if (!install_page (entry->uaddr, kpage, entry->writable)) {
     free_frame_from_supp_pte (&entry->elem, thread_current ());
     release_table_locks (table_held);
     return false;

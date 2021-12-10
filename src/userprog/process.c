@@ -665,7 +665,7 @@ setup_supp_ptes (struct file *file, off_t ofs, uint8_t *upage,
       
       struct hash *supp_page_table = &thread_current ()->supp_page_table;
       supp_pte old_entry_query;
-      old_entry_query.addr = upage;
+      old_entry_query.uaddr = upage;
       struct hash_elem *old_entry_elem = hash_find (supp_page_table, &old_entry_query.elem);
       
       
@@ -705,7 +705,7 @@ set_up_pte_for_stack (void *upage) {
   if (!entry) {
     return NULL;
   }
-  entry->addr = pg_round_down (upage);
+  entry->uaddr = pg_round_down (upage);
   entry->writable = true;
   entry->page_source = STACK;
   entry->is_in_swap_space = false;

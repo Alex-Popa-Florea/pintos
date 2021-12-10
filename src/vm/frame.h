@@ -24,7 +24,7 @@ extern struct lock frame_table_lock;
   Struct to store an entry in the frame table 
 */
 typedef struct {
-  void *page;               /* The page where data is stored */                
+  void *kpage;              /* The kernel page where data is stored */                
   struct list_elem elem;    /* Elem to insert into frame table */
 
   struct inode *inode;      /* Inode to find a share table entry */

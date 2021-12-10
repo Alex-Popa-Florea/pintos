@@ -118,7 +118,7 @@ swap_hash_compare (const struct hash_elem *a, const struct hash_elem *b, void *a
   if (entryA->supp_pte->thread->tid < entryB->supp_pte->thread->tid) {
     return true;
   } else if (entryA->supp_pte->thread->tid == entryB->supp_pte->thread->tid){
-    return entryA->supp_pte->addr < entryB->supp_pte->addr;
+    return entryA->supp_pte->uaddr < entryB->supp_pte->uaddr;
   } else {
     return false;
   }
